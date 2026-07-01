@@ -34,7 +34,7 @@ The easiest way to run Dockenciler is using Docker Compose.
 ```yaml
 services:
   dockenciler:
-    image: your-repo/dockenciler:latest
+    image: ghcr.io/omartism/dockenciler:latest
     container_name: dockenciler
     labels:
       - "dockenciler.instance=true"
@@ -52,6 +52,48 @@ services:
 
 ```bash
 docker compose up -d
+```
+
+### Docker Swarm
+
+For Docker Swarm deployments, use a stack file:
+
+```yaml
+services:
+  dockenciler:
+    image: ghcr.io/omartism/dockenciler:latest
+    environment:
+      DOCKENCILER_REGISTRY_TYPE: "ecr"
+      DOCKENCILER_DOCKER_LABEL_FILTER: "dockenciler.instance=true"
+      DOCKENCILER_REGISTRY_REGION: "eu-west-2"
+      DOCKENCILER_RECONCILE_INTERVAL: "1m"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - proxy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    labels:
+      - "traefik.enable=false"
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+
+networks:
+  proxy:
+    external: true
+```
+
+Deploy the stack:
+
+```bash
+docker stack deploy -c dockenciler-stack.yml dockenciler
 ```
 
 ### Building from Source

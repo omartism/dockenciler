@@ -243,11 +243,21 @@ func (p *ECRProvider) GetImageVersion(ctx context.Context, imageRef string) (str
     return "", fmt.Errorf("latest image has no tag")
 }
 
-// parseImageRef parses an image reference in the format "repository:tag" or "repository:latest"
-// For ECR, it extracts just the repository name without the registry prefix
+// parseImageRef parses an image reference in formats:
+//   - "repository:tag"
+//   - "repository@sha256:digest"
+//   - "registry/repo:tag"
+//   - "registry/repo@sha256:digest"
+//
+// For ECR, it extracts just the repository name without the registry prefix.
 func parseImageRef(imageRef string) (repo string, tag string, err error) {
     if len(imageRef) == 0 {
         return "", "", fmt.Errorf("empty image reference")
+    }
+
+    // Strip digest part if present (e.g., "repo:tag@sha256:abc" -> "repo:tag")
+    if idx := strings.Index(imageRef, "@"); idx != -1 {
+        imageRef = imageRef[:idx]
     }
 
     // Find the last colon to separate repo and tag
@@ -260,7 +270,6 @@ func parseImageRef(imageRef string) (repo string, tag string, err error) {
     }
 
     if lastColon == -1 {
-        // No tag specified, assume latest
         repo = imageRef
         tag = "latest"
     } else {
