@@ -1,0 +1,34 @@
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - docs/**
+
+enhancement:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.go'
+          - go.mod
+          - go.sum
+
+bug:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*_test.go'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - go.mod
+          - go.sum
+
+github_actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - Dockerfile
+          - docker-compose*.yml
