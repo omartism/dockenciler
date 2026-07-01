@@ -6,6 +6,7 @@ import (
     "fmt"
     "regexp"
     "sort"
+    "strings"
     "sync"
     "time"
 
@@ -243,9 +244,8 @@ func (p *ECRProvider) GetImageVersion(ctx context.Context, imageRef string) (str
 }
 
 // parseImageRef parses an image reference in the format "repository:tag" or "repository:latest"
+// For ECR, it extracts just the repository name without the registry prefix
 func parseImageRef(imageRef string) (repo string, tag string, err error) {
-    // Simple parsing - assumes format "repository:tag"
-    // For ECR, the repository might include registry prefix like "123456789.dkr.ecr.region.amazonaws.com/repo"
     if len(imageRef) == 0 {
         return "", "", fmt.Errorf("empty image reference")
     }
@@ -270,6 +270,11 @@ func parseImageRef(imageRef string) (repo string, tag string, err error) {
 
     if repo == "" {
         return "", "", fmt.Errorf("empty repository name")
+    }
+
+    // Strip registry prefix if present (e.g., "123456789.dkr.ecr.region.amazonaws.com/repo" -> "repo")
+    if idx := strings.LastIndex(repo, "/"); idx != -1 {
+        repo = repo[idx+1:]
     }
 
     return repo, tag, nil
