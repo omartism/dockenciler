@@ -128,6 +128,18 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
 | `DOCKENCILER_CRITERIA_REGEX` | `criteria.regex` | Regex to match tags | - |
 | `DOCKENCILER_CRITERIA_DIGEST` | `criteria.digest` | Exact image digest to match | - |
 | `DOCKENCILER_EXCLUSIONS` | `exclusions` | Comma-separated list of container IDs to skip | `[]` |
+| `DOCKENCILER_SLACK_WEBHOOK_URL` | `notifications.slack_webhook_url` | Slack webhook URL | - |
+| `DOCKENCILER_DISCORD_WEBHOOK_URL` | `notifications.discord_webhook_url` | Discord webhook URL | - |
+| `DOCKENCILER_TELEGRAM_BOT_TOKEN` | `notifications.telegram_bot_token` | Telegram bot token | - |
+| `DOCKENCILER_TELEGRAM_CHAT_ID` | `notifications.telegram_chat_id` | Telegram chat ID | - |
+| `DOCKENCILER_EMAIL_HOST` | `notifications.email_host` | SMTP host | - |
+| `DOCKENCILER_EMAIL_PORT` | `notifications.email_port` | SMTP port | - |
+| `DOCKENCILER_EMAIL_USER` | `notifications.email_user` | SMTP username | - |
+| `DOCKENCILER_EMAIL_PASSWORD` | `notifications.email_password` | SMTP password | - |
+| `DOCKENCILER_EMAIL_FROM` | `notifications.email_from` | Sender email address | - |
+| `DOCKENCILER_EMAIL_TO` | `notifications.email_to` | Recipient email address | - |
+| `DOCKENCILER_MSTEAMS_WEBHOOK_URL` | `notifications.msteams_webhook_url` | Microsoft Teams webhook URL | - |
+| `DOCKENCILER_GOOGLE_CHAT_WEBHOOK_URL` | `notifications.google_chat_webhook_url` | Google Chat webhook URL | - |
 
 ### Example Configuration (`config.json`)
 
@@ -152,6 +164,131 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
   "exclusions": ["container_id_1", "container_id_2"]
 }
 ```
+
+## 🔔 Notifications
+
+Dockenciler can send notifications when containers are updated. Notifications are configured via environment variables and multiple providers can be used simultaneously.
+
+### Supported Providers
+
+| Provider | Environment Variable | Description |
+|----------|---------------------|-------------|
+| **Log** | Always enabled | Logs to stdout (always active) |
+| **Slack** | `DOCKENCILER_SLACK_WEBHOOK_URL` | Slack incoming webhook |
+| **Discord** | `DOCKENCILER_DISCORD_WEBHOOK_URL` | Discord webhook |
+| **Telegram** | `DOCKENCILER_TELEGRAM_BOT_TOKEN` + `DOCKENCILER_TELEGRAM_CHAT_ID` | Telegram bot |
+| **Email** | `DOCKENCILER_EMAIL_HOST`, `DOCKENCILER_EMAIL_PORT`, etc. | SMTP email |
+| **Microsoft Teams** | `DOCKENCILER_MSTEAMS_WEBHOOK_URL` | Teams incoming webhook |
+| **Google Chat** | `DOCKENCILER_GOOGLE_CHAT_WEBHOOK_URL` | Google Chat webhook |
+
+### Slack Setup
+
+1. Create a Slack app at https://api.slack.com/apps
+2. Enable "Incoming Webhooks" and create a webhook URL
+3. Add the webhook URL to your configuration:
+
+```bash
+export DOCKENCILER_SLACK_WEBHOOK_URL="<your-slack-webhook-url>"
+```
+
+Or in `config.json`:
+```json
+{
+  "notifications": {
+    "slack_webhook_url": "<your-slack-webhook-url>"
+  }
+}
+}
+```
+
+### Discord Setup
+
+1. Go to Server Settings → Integrations → Webhooks
+2. Create a new webhook and copy the URL
+3. Add the webhook URL to your configuration:
+
+```bash
+export DOCKENCILER_DISCORD_WEBHOOK_URL="<your-discord-webhook-url>"
+```
+
+### Telegram Setup
+
+1. Create a bot via @BotFather on Telegram
+2. Get the bot token from BotFather
+3. Add the bot to your group/channel and get the chat ID
+4. Configure both values:
+
+```bash
+export DOCKENCILER_TELEGRAM_BOT_TOKEN="123456789:********"
+export DOCKENCILER_TELEGRAM_CHAT_ID="*****"
+```
+
+### Email (SMTP) Setup
+
+Configure your SMTP server details:
+
+```bash
+export DOCKENCILER_EMAIL_HOST="smtp.gmail.com"
+export DOCKENCILER_EMAIL_PORT="587"
+export DOCKENCILER_EMAIL_USER="your-email@gmail.com"
+export DOCKENCILER_EMAIL_PASSWORD="your-app-password"
+export DOCKENCILER_EMAIL_FROM="dockenciler@yourdomain.com"
+export DOCKENCILER_EMAIL_TO="alerts@yourdomain.com"
+```
+
+> **Note:** For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password.
+
+### Microsoft Teams Setup
+
+1. Go to your Teams channel → Connectors (or Workflows)
+2. Create an "Incoming Webhook" connector
+3. Copy the webhook URL:
+
+```bash
+export DOCKENCILER_MSTEAMS_WEBHOOK_URL="<your-msteams-webhook-url>"
+```
+
+### Google Chat Setup
+
+1. Open the space where you want to add the bot
+2. Click the down arrow → Manage webhooks
+3. Create a new webhook and copy the URL:
+
+```bash
+export DOCKENCILER_GOOGLE_CHAT_WEBHOOK_URL="<your-google-chat-webhook-url>"
+```
+
+### Example: Multiple Providers
+
+You can enable multiple providers at once:
+
+```bash
+export DOCKENCILER_SLACK_WEBHOOK_URL="<your-slack-webhook-url>"
+export DOCKENCILER_TELEGRAM_BOT_TOKEN="<your-telegram-bot-token>"
+export DOCKENCILER_TELEGRAM_CHAT_ID="<your-telegram-chat-id>"
+export DOCKENCILER_LOG_LEVEL="info"
+```
+
+Or in `config.json`:
+```json
+{
+  "notifications": {
+    "slack_webhook_url": "<your-slack-webhook-url>",
+    "telegram_bot_token": "<your-telegram-bot-token>",
+    "telegram_chat_id": "<your-telegram-chat-id>"
+  }
+}
+```
+
+### Notification Format
+
+When a container is updated, Dockenciler sends a notification with:
+
+- **Subject**: `Container <container_id> updated`
+- **Body**: `Container <container_id> was updated from digest <old_digest> to <new_digest>`
+- **Level**: `info`
+
+Logs are always written to stdout regardless of other notification providers.
 
 ## 📜 Versioning
 

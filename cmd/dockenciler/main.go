@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -123,5 +124,43 @@ func newNotifier(cfg *config.Config) notifier.Notifier {
 	notifiers := []notifier.Notifier{
 		notifier.NewLogNotifier(slog.Default()),
 	}
+
+	if cfg.Notifications.SlackWebhookURL != "" {
+		notifiers = append(notifiers, notifier.NewSlackNotifier(cfg.Notifications.SlackWebhookURL, &http.Client{}))
+		slog.Info("Slack notifications enabled")
+	}
+
+	if cfg.Notifications.DiscordWebhookURL != "" {
+		notifiers = append(notifiers, notifier.NewDiscordNotifier(cfg.Notifications.DiscordWebhookURL, &http.Client{}))
+		slog.Info("Discord notifications enabled")
+	}
+
+	if cfg.Notifications.TelegramBotToken != "" && cfg.Notifications.TelegramChatID != "" {
+		notifiers = append(notifiers, notifier.NewTelegramNotifier(cfg.Notifications.TelegramBotToken, cfg.Notifications.TelegramChatID, &http.Client{}))
+		slog.Info("Telegram notifications enabled")
+	}
+
+	if cfg.Notifications.MSTeamsWebhookURL != "" {
+		notifiers = append(notifiers, notifier.NewMSTeamsNotifier(cfg.Notifications.MSTeamsWebhookURL, &http.Client{}))
+		slog.Info("Microsoft Teams notifications enabled")
+	}
+
+	if cfg.Notifications.GoogleChatWebhookURL != "" {
+		notifiers = append(notifiers, notifier.NewGoogleChatNotifier(cfg.Notifications.GoogleChatWebhookURL, &http.Client{}))
+		slog.Info("Google Chat notifications enabled")
+	}
+
+	if cfg.Notifications.EmailHost != "" && cfg.Notifications.EmailPort != "" {
+		notifiers = append(notifiers, notifier.NewEmailNotifier(
+			cfg.Notifications.EmailHost,
+			cfg.Notifications.EmailPort,
+			cfg.Notifications.EmailUser,
+			cfg.Notifications.EmailPassword,
+			cfg.Notifications.EmailFrom,
+			cfg.Notifications.EmailTo,
+		))
+		slog.Info("Email notifications enabled")
+	}
+
 	return notifier.NewCompositeNotifier(notifiers...)
 }

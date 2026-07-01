@@ -30,11 +30,27 @@ type Criteria struct {
 type Config struct {
     Registry         Registry `json:"registry" mapstructure:"registry"`
     Docker           Docker   `json:"docker" mapstructure:"docker"`
+    Notifications    Notifications `json:"notifications" mapstructure:"notifications"`
     ReconcileInterval string   `json:"reconcile_interval" mapstructure:"reconcile_interval"`
-    LogLevel         string   `json:"log_level" mapstructure:"log_level"`
+    LogLevel         string     `json:"log_level" mapstructure:"log_level"`
     Criteria         Criteria `json:"criteria" mapstructure:"criteria"`
     DryRun           bool     `json:"dry_run" mapstructure:"dry_run"`
     Exclusions       []string `json:"exclusions" mapstructure:"exclusions"`
+}
+
+type Notifications struct {
+    SlackWebhookURL  string `json:"slack_webhook_url" mapstructure:"slack_webhook_url"`
+    DiscordWebhookURL string `json:"discord_webhook_url" mapstructure:"discord_webhook_url"`
+    TelegramBotToken string `json:"telegram_bot_token" mapstructure:"telegram_bot_token"`
+    TelegramChatID   string `json:"telegram_chat_id" mapstructure:"telegram_chat_id"`
+    EmailHost        string `json:"email_host" mapstructure:"email_host"`
+    EmailPort        string `json:"email_port" mapstructure:"email_port"`
+    EmailUser        string `json:"email_user" mapstructure:"email_user"`
+    EmailPassword    string `json:"email_password" mapstructure:"email_password"`
+    EmailFrom        string `json:"email_from" mapstructure:"email_from"`
+    EmailTo          string `json:"email_to" mapstructure:"email_to"`
+    MSTeamsWebhookURL  string `json:"msteams_webhook_url" mapstructure:"msteams_webhook_url"`
+    GoogleChatWebhookURL string `json:"google_chat_webhook_url" mapstructure:"google_chat_webhook_url"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -49,16 +65,28 @@ func LoadConfig(path string) (*Config, error) {
     v.SetEnvPrefix("DOCKENCILER")
     v.AutomaticEnv()
 
-    // Set defaults so AutomaticEnv knows which keys to look for
-    v.SetDefault("registry.type", "")
-    v.SetDefault("registry.region", "")
-    v.SetDefault("registry.access_key", "")
-    v.SetDefault("registry.secret_key", "")
-    v.SetDefault("docker.socket_path", "/var/run/docker.sock")
-    v.SetDefault("docker.label_filter", "dockenciler.autoupdate=true")
-    v.SetDefault("reconcile_interval", "1h")
-    v.SetDefault("log_level", "info")
-    v.SetDefault("dry_run", false)
+	// Set defaults so AutomaticEnv knows which keys to look for
+	v.SetDefault("registry.type", "")
+	v.SetDefault("registry.region", "")
+	v.SetDefault("registry.access_key", "")
+	v.SetDefault("registry.secret_key", "")
+	v.SetDefault("docker.socket_path", "/var/run/docker.sock")
+	v.SetDefault("docker.label_filter", "dockenciler.autoupdate=true")
+	v.SetDefault("reconcile_interval", "1h")
+	v.SetDefault("log_level", "info")
+	v.SetDefault("dry_run", false)
+	v.SetDefault("notifications.slack_webhook_url", "")
+	v.SetDefault("notifications.discord_webhook_url", "")
+	v.SetDefault("notifications.telegram_bot_token", "")
+	v.SetDefault("notifications.telegram_chat_id", "")
+	v.SetDefault("notifications.email_host", "")
+	v.SetDefault("notifications.email_port", "")
+	v.SetDefault("notifications.email_user", "")
+	v.SetDefault("notifications.email_password", "")
+	v.SetDefault("notifications.email_from", "")
+	v.SetDefault("notifications.email_to", "")
+	v.SetDefault("notifications.msteams_webhook_url", "")
+	v.SetDefault("notifications.google_chat_webhook_url", "")
 
     // Handle nested structs by replacing dots with underscores
     v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
