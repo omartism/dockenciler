@@ -3,7 +3,7 @@ BINARY_NAME=dockenciler
 # Main package path
 MAIN_PACKAGE=./cmd/dockenciler
 
-.PHONY: all build test clean fmt tidy docker-build docker-up
+.PHONY: all build test clean fmt tidy docker-build docker-up security-scan
 
 all: build test
 
@@ -34,6 +34,13 @@ docker-build:
 ## docker-up: Run with Docker Compose
 docker-up:
 	docker compose up -d
+
+## security-scan: Run Trivy security scan locally
+security-scan:
+	@echo "Running Trivy filesystem scan..."
+	trivy fs --severity CRITICAL,HIGH .
+	@echo "Running Trivy config scan..."
+	trivy config --severity CRITICAL,HIGH,MEDIUM .
 
 ## help: Show this help message
 help:
