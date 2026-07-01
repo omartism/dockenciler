@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git
@@ -17,7 +17,7 @@ COPY . .
 # Build the application
 # -ldflags="-s -w" strips symbol table and debug information to reduce binary size
 # CGO_ENABLED=0 ensures a statically linked binary for scratch/distroless images
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o dockenciler .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o dockenciler ./cmd/dockenciler
 
 # Final stage
 FROM gcr.io/distroless/static-debian12:latest
@@ -30,7 +30,7 @@ COPY --from=builder /app/dockenciler /dockenciler
 
 # Default environment variables
 ENV DOCKENCILER_LOG_LEVEL=info \
-    DOCKENCILER_RECONCILE_INTERVAL=1h \
+    DOCKENCILER_RECONCILE_INTERVAL=5m \
     DOCKENCILER_DOCKER_SOCKET_PATH=/var/run/docker.sock \
     DOCKENCILER_DOCKER_LABEL_FILTER=dockenciler.autoupdate=true \
     DOCKENCILER_DRY_RUN=false

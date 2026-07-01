@@ -23,7 +23,7 @@ Dockenciler is a lightweight and efficient open-source Docker reconciler written
   - **Dry-Run Mode**: Preview updates without applying changes.
   - **Self-Update Exclusion**: Automatically skips the Dockenciler instance itself (via `dockenciler.instance=true` label) and configurable exclusion lists.
 
-## 🛠 Installation
+## 🛠 Installation & Development
 
 ### Using Docker Compose
 
@@ -51,6 +51,17 @@ services:
 ```bash
 docker compose up -d
 ```
+
+### Building from Source
+
+Dockenciler includes a `Makefile` for convenient development:
+
+- **Build**: `make build` - Compiles the binary to the root directory.
+- **Test**: `make test` - Runs all tests in the repository.
+- **Tidy**: `make tidy` - Cleans up `go.mod` and `go.sum`.
+- **Format**: `make fmt` - Formats code according to Go standards.
+- **Docker Image**: `make docker-build` - Builds the production Docker image.
+
 
 ## ⚙️ Configuration
 
