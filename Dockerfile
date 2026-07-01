@@ -35,9 +35,6 @@ ENV DOCKENCILER_LOG_LEVEL=info \
     DOCKENCILER_DOCKER_LABEL_FILTER=dockenciler.autoupdate=true \
     DOCKENCILER_DRY_RUN=false
 
-# Use a non-root user (distroless static has a nonroot user by default)
-USER nonroot:nonroot
-
 # Healthcheck to ensure the process is running
 HEALTHCHECK --interval=30s --timeout=3s \
   CMD ps aux | grep dockenciler || exit 1

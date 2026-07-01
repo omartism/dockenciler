@@ -46,6 +46,8 @@ services:
     restart: always
 ```
 
+> **Note:** Dockenciler needs access to the Docker socket to manage containers. The image runs as root by default, which has the necessary permissions. If you run it as a non-root user, ensure the user is in the `docker` group (e.g., via `group_add` in Docker Compose or `--group-add docker` with `docker service create`).
+
 2. Start the container:
 
 ```bash

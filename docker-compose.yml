@@ -7,6 +7,3 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.json:/home/dockenciler/config.json:ro
     env_file: .env
-    # Ensure the container can talk to the docker socket
-    # Depending on the host, you might need to map the group ID
-    # user: "1000:999" # example: mapping to docker group
