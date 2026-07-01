@@ -1,0 +1,327 @@
+package docker
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "io"
+    "strings"
+
+    "github.com/docker/docker/client"
+    "github.com/docker/go-connections/nat"
+    "github.com/docker/docker/api/types"
+    "github.com/docker/docker/api/types/container"
+    "github.com/docker/docker/api/types/filters"
+    "github.com/docker/docker/api/types/image"
+    "github.com/docker/docker/api/types/mount"
+    "github.com/docker/docker/api/types/strslice"
+)
+
+type Container struct {
+    ID     string
+    Image  string
+    Labels map[string]string
+}
+
+type ContainerSpec struct {
+    NetworkMode  string
+    Links        []string
+    RestartPolicy string
+    CapAdd       []string
+    CapDrop      []string
+    SecurityOpt  []string
+    Tmpfs        []string
+    Devices      []string
+    PidMode      string
+    IpcMode      string
+    User         string
+    WorkingDir   string
+    Env          []string
+    Mounts       []string
+    PortBindings []string
+    Healthcheck  string
+    Entrypoint   []string
+    Cmd          []string
+}
+
+type ServiceSpec struct {
+    Name        string
+    TaskTemplate struct {
+        ContainerSpec struct {
+            Image string
+        }
+    }
+}
+
+type DockerClient interface {
+	ListContainers(ctx context.Context, labelFilter string) ([]Container, error)
+	InspectContainer(ctx context.Context, id string) (ContainerSpec, error)
+	PullImage(ctx context.Context, imageRef string) error
+	RecreateContainer(ctx context.Context, id string, spec ContainerSpec, newImage string) error
+	UpdateService(ctx context.Context, serviceID string, spec ServiceSpec) error
+	Authenticate(ctx context.Context, registry, token string) error
+	GetImageDigest(ctx context.Context, imageRef string) (string, error)
+}
+
+
+type DockerClientImpl struct {
+    client *client.Client
+}
+
+func NewDockerClient() (*DockerClientImpl, error) {
+    cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+    if err != nil {
+        return nil, err
+    }
+    return &DockerClientImpl{client: cli}, nil
+}
+
+func (d *DockerClientImpl) ListContainers(ctx context.Context, labelFilter string) ([]Container, error) {
+    filterArgs := filters.NewArgs()
+    if labelFilter != "" {
+        filterArgs.Add("label", labelFilter)
+    }
+
+    containers, err := d.client.ContainerList(ctx, container.ListOptions{
+        All:     true,
+        Filters: filterArgs,
+    })
+    if err != nil {
+        return nil, err
+    }
+
+    result := make([]Container, len(containers))
+    for i, c := range containers {
+        result[i] = Container{
+            ID:     c.ID,
+            Image:  c.Image,
+            Labels: c.Labels,
+        }
+    }
+    return result, nil
+}
+
+func (d *DockerClientImpl) InspectContainer(ctx context.Context, id string) (ContainerSpec, error) {
+    inspected, err := d.client.ContainerInspect(ctx, id)
+    if err != nil {
+        return ContainerSpec{}, err
+    }
+
+    spec := ContainerSpec{}
+
+    if inspected.HostConfig != nil {
+        spec.NetworkMode = string(inspected.HostConfig.NetworkMode)
+        if inspected.HostConfig.RestartPolicy.Name != "" {
+            spec.RestartPolicy = string(inspected.HostConfig.RestartPolicy.Name)
+        }
+        spec.CapAdd = inspected.HostConfig.CapAdd
+        spec.CapDrop = inspected.HostConfig.CapDrop
+        spec.SecurityOpt = inspected.HostConfig.SecurityOpt
+        spec.Tmpfs = mapToStringSlice(inspected.HostConfig.Tmpfs)
+        spec.Devices = deviceMappingsToStrings(inspected.HostConfig.Devices)
+        spec.PidMode = string(inspected.HostConfig.PidMode)
+        spec.IpcMode = string(inspected.HostConfig.IpcMode)
+        spec.Mounts = mountsToStrings(inspected.HostConfig.Mounts)
+        spec.PortBindings = portBindingsToStrings(inspected.HostConfig.PortBindings)
+    }
+
+    if inspected.Config != nil {
+        spec.Healthcheck = healthcheckToString(inspected.Config.Healthcheck)
+        spec.Entrypoint = inspected.Config.Entrypoint
+        spec.Cmd = inspected.Config.Cmd
+    }
+
+    if len(inspected.NetworkSettings.Ports) > 0 {
+        spec.Links = networkSettingsToLinks(inspected.NetworkSettings)
+    }
+
+    return spec, nil
+}
+
+func (d *DockerClientImpl) PullImage(ctx context.Context, imageRef string) error {
+    out, err := d.client.ImagePull(ctx, imageRef, image.PullOptions{})
+    if err != nil {
+        return err
+    }
+    defer out.Close()
+
+    _, err = io.Copy(io.Discard, out)
+    return err
+}
+
+func (d *DockerClientImpl) RecreateContainer(ctx context.Context, id string, spec ContainerSpec, newImage string) error {
+    stopOpts := container.StopOptions{}
+    if err := d.client.ContainerStop(ctx, id, stopOpts); err != nil {
+        return fmt.Errorf("failed to stop container %s: %w", id, err)
+    }
+
+    removeOpts := container.RemoveOptions{Force: true}
+    if err := d.client.ContainerRemove(ctx, id, removeOpts); err != nil {
+        return fmt.Errorf("failed to remove container %s: %w", id, err)
+    }
+
+    containerConfig := &container.Config{
+        Image:      newImage,
+        Entrypoint: spec.Entrypoint,
+        Cmd:        spec.Cmd,
+        Env:        spec.Env,
+        WorkingDir: spec.WorkingDir,
+        User:       spec.User,
+    }
+
+    if spec.Healthcheck != "" {
+        hc := parseHealthcheck(spec.Healthcheck)
+        containerConfig.Healthcheck = hc
+    }
+
+    hostConfig := &container.HostConfig{
+        NetworkMode:  container.NetworkMode(spec.NetworkMode),
+        RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyMode(spec.RestartPolicy)},
+        CapAdd:       strslice.StrSlice(spec.CapAdd),
+        CapDrop:      strslice.StrSlice(spec.CapDrop),
+        SecurityOpt:  spec.SecurityOpt,
+        Tmpfs:        stringSliceToMap(spec.Tmpfs),
+        PidMode:      container.PidMode(spec.PidMode),
+        IpcMode:      container.IpcMode(spec.IpcMode),
+        Mounts:       parseMounts(spec.Mounts),
+        PortBindings: parsePortBindings(spec.PortBindings),
+        Resources: container.Resources{
+            Devices: parseDevices(spec.Devices),
+        },
+    }
+
+    name := "recreated-" + id
+    createResp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, name)
+    if err != nil {
+        return fmt.Errorf("failed to create container: %w", err)
+    }
+
+    if err := d.client.ContainerStart(ctx, createResp.ID, container.StartOptions{}); err != nil {
+        return fmt.Errorf("failed to start container: %w", err)
+    }
+
+    return nil
+}
+
+func (d *DockerClientImpl) GetImageDigest(ctx context.Context, imageRef string) (string, error) {
+    inspected, _, err := d.client.ImageInspectWithRaw(ctx, imageRef)
+    if err != nil {
+        return "", err
+    }
+    if len(inspected.RepoDigests) > 0 {
+        return inspected.RepoDigests[0], nil
+    }
+    return "", fmt.Errorf("no digest found for image %s", imageRef)
+}
+
+func mountsToStrings(mounts []mount.Mount) []string {
+    result := make([]string, len(mounts))
+    for i, m := range mounts {
+        b, _ := json.Marshal(m)
+        result[i] = string(b)
+    }
+    return result
+}
+
+func portBindingsToStrings(bindings nat.PortMap) []string {
+    result := make([]string, 0, len(bindings))
+    for port, bindings := range bindings {
+        for _, b := range bindings {
+            result = append(result, fmt.Sprintf("%s:%s", port, b.HostPort))
+        }
+    }
+    return result
+}
+
+func healthcheckToString(hc *container.HealthConfig) string {
+    if hc == nil {
+        return ""
+    }
+    b, _ := json.Marshal(hc)
+    return string(b)
+}
+
+func networkSettingsToLinks(ns *types.NetworkSettings) []string {
+    var links []string
+    for net, ports := range ns.Ports {
+        for _, binding := range ports {
+            if binding.HostIP != "" && binding.HostPort != "" {
+                links = append(links, fmt.Sprintf("%s:%s", net, binding.HostPort))
+            }
+        }
+    }
+    return links
+}
+
+func parseHealthcheck(hcStr string) *container.HealthConfig {
+    var hc container.HealthConfig
+    if err := json.Unmarshal([]byte(hcStr), &hc); err != nil {
+        return nil
+    }
+    return &hc
+}
+
+func parseDevices(devices []string) []container.DeviceMapping {
+    result := make([]container.DeviceMapping, len(devices))
+    for i, d := range devices {
+        parts := strings.Split(d, ":")
+        if len(parts) >= 2 {
+            result[i] = container.DeviceMapping{PathOnHost: parts[0], PathInContainer: parts[1]}
+        }
+    }
+    return result
+}
+
+func deviceMappingsToStrings(devices []container.DeviceMapping) []string {
+    result := make([]string, len(devices))
+    for i, d := range devices {
+        b, _ := json.Marshal(d)
+        result[i] = string(b)
+    }
+    return result
+}
+
+func parseMounts(mounts []string) []mount.Mount {
+    result := make([]mount.Mount, len(mounts))
+    for i, m := range mounts {
+        var mount mount.Mount
+        if err := json.Unmarshal([]byte(m), &mount); err != nil {
+            continue
+        }
+        result[i] = mount
+    }
+    return result
+}
+
+func parsePortBindings(bindings []string) nat.PortMap {
+    result := make(nat.PortMap)
+    for _, b := range bindings {
+        parts := strings.Split(b, ":")
+        if len(parts) >= 2 {
+            port := nat.Port(parts[0])
+            result[port] = []nat.PortBinding{{HostPort: parts[1]}}
+        }
+    }
+    return result
+}
+
+func mapToStringSlice(m map[string]string) []string {
+    result := make([]string, 0, len(m))
+    for k, v := range m {
+        result = append(result, fmt.Sprintf("%s=%s", k, v))
+    }
+    return result
+}
+
+func stringSliceToMap(tmpfs []string) map[string]string {
+    result := make(map[string]string)
+    for _, t := range tmpfs {
+        if strings.Contains(t, "=") {
+            parts := strings.SplitN(t, "=", 2)
+            result[parts[0]] = parts[1]
+        } else {
+            result[t] = ""
+        }
+    }
+    return result
+}

@@ -1,0 +1,10 @@
+.git
+.github
+*.md
+*.txt
+bin/
+obj/
+vendor/
+.dockerignore
+Dockerfile
+docker-compose.yml

@@ -1,0 +1,208 @@
+package reconciler
+
+import (
+    "context"
+    "fmt"
+    "log/slog"
+
+    "github.com/omarismael/dockenciler/pkg/config"
+    "github.com/omarismael/dockenciler/pkg/docker"
+    "github.com/omarismael/dockenciler/pkg/registry"
+    "github.com/omarismael/dockenciler/pkg/notifier"
+)
+
+// Reconciler struct holds dependencies for reconciliation
+// In a real implementation, these would be concrete types
+// For this interface design spike, we use interface types directly
+// to demonstrate dependency injection
+type Reconciler struct {
+    DockerClient interface {
+        ListContainers(ctx context.Context, labelFilter string) ([]docker.Container, error)
+        InspectContainer(ctx context.Context, id string) (docker.ContainerSpec, error)
+        PullImage(ctx context.Context, imageRef string) error
+        RecreateContainer(ctx context.Context, id string, spec docker.ContainerSpec, newImage string) error
+        UpdateService(ctx context.Context, serviceID string, spec docker.ServiceSpec) error
+        GetImageDigest(ctx context.Context, imageRef string) (string, error)
+        IsSwarmMode(ctx context.Context) (bool, error)
+        GetServiceID(ctx context.Context, containerID string) (string, error)
+        Authenticate(ctx context.Context, registryURL string, token string) error
+    }
+    Registry interface {
+        GetLatestDigest(ctx context.Context, imageRef string, criteria registry.Criteria) (string, error)
+        GetImageVersion(ctx context.Context, imageRef string) (string, error)
+        GetAuthToken(ctx context.Context) (string, string, error) // returns registryURL and token
+    }
+    Notifier interface {
+        Notify(ctx context.Context, n notifier.Notification) error
+    }
+    Config *config.Config
+}
+
+func convertConfigCriteriaToRegistryCriteria(configCriteria config.Criteria) registry.Criteria {
+    return registry.Criteria{
+        Version: configCriteria.Version,
+        Regex:   configCriteria.Regex,
+        Digest:  configCriteria.Digest,
+    }
+}
+
+func (r *Reconciler) Reconcile(ctx context.Context) error {
+    // List containers using the configured label filter
+    containers, err := r.DockerClient.ListContainers(ctx, r.Config.Docker.LabelFilter)
+    if err != nil {
+        slog.Error("Failed to list containers", "error", err)
+        return fmt.Errorf("failed to list containers: %w", err)
+    }
+
+    slog.Info("Starting reconciliation", "container_count", len(containers))
+
+    for _, container := range containers {
+        // Skip self-update: containers with dockenciler.instance=true label
+        if container.Labels != nil && container.Labels["dockenciler.instance"] == "true" {
+            slog.Info("Skipping self-update container", "container_id", container.ID)
+            continue
+        }
+
+        // Skip containers in exclusions list
+        isExcluded := false
+        if r.Config.Exclusions != nil {
+            for _, exclusion := range r.Config.Exclusions {
+                if exclusion == container.ID {
+                    slog.Info("Skipping excluded container", "container_id", container.ID, "exclusion", exclusion)
+                    isExcluded = true
+                    break
+                }
+            }
+        }
+        if isExcluded {
+            continue
+        }
+
+        slog.Info("Checking container", "container_id", container.ID, "image", container.Image)
+
+        // Get the current image digest
+        currentDigest, err := r.DockerClient.GetImageDigest(ctx, container.Image)
+        if err != nil {
+            slog.Error("Failed to get current image digest", "container_id", container.ID, "error", err)
+            continue // Continue to next container
+        }
+
+        // Get the latest digest from registry using configured criteria
+        criteria := convertConfigCriteriaToRegistryCriteria(r.Config.Criteria)
+        latestDigest, err := r.Registry.GetLatestDigest(ctx, container.Image, criteria)
+        if err != nil {
+            slog.Error("Failed to get latest digest", "container_id", container.ID, "error", err)
+            continue // Continue to next container
+        }
+
+        // Compare digests
+        if currentDigest == latestDigest {
+            slog.Info("Container is up to date", "container_id", container.ID, "digest", currentDigest)
+            continue
+        }
+
+        // Digests differ, update required
+        slog.Info("Update required for container", "container_id", container.ID, "current_digest", currentDigest, "latest_digest", latestDigest)
+
+        // Check if dry-run mode is enabled
+        if r.Config.DryRun {
+            slog.Info("Dry-run: would update container", "container_id", container.ID, "from_digest", currentDigest, "to_digest", latestDigest)
+            continue
+        }
+
+        // Get auth token from registry
+        registryURL, token, err := r.Registry.GetAuthToken(ctx)
+        if err != nil {
+            slog.Error("Failed to get auth token from registry", "container_id", container.ID, "error", err)
+            continue // Continue to next container
+        }
+
+        // Authenticate with Docker daemon
+        if err := r.DockerClient.Authenticate(ctx, registryURL, token); err != nil {
+            slog.Error("Failed to authenticate with Docker daemon", "container_id", container.ID, "error", err)
+            continue // Continue to next container
+        }
+
+        // Pull the new image
+        if err := r.DockerClient.PullImage(ctx, container.Image); err != nil {
+            slog.Error("Failed to pull image", "container_id", container.ID, "error", err)
+            continue // Continue to next container
+        }
+
+        // Inspect container to get full spec
+        spec, err := r.DockerClient.InspectContainer(ctx, container.ID)
+        if err != nil {
+            slog.Error("Failed to inspect container", "container_id", container.ID, "error", err)
+            continue // Continue to next container
+        }
+
+        // Check if we're in Swarm mode and if this container is managed by a service
+        isSwarm, err := r.DockerClient.IsSwarmMode(ctx)
+        if err != nil {
+            slog.Error("Failed to check swarm mode", "container_id", container.ID, "error", err)
+            // Continue with recreation if we can't determine swarm status
+            isSwarm = false
+        }
+
+        var containerUpdated bool
+        if isSwarm {
+            // Try to get the service ID for this container
+            serviceID, err := r.DockerClient.GetServiceID(ctx, container.ID)
+            if err == nil && serviceID != "" {
+// Use service update for rolling update
+			serviceSpec := docker.ServiceSpec{}
+			serviceSpec.TaskTemplate.ContainerSpec.Image = container.Image
+			slog.Info("Updating service for rolling update", "container_id", container.ID, "service_id", serviceID)
+			if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
+				slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "error", err)
+				// Fall back to container recreation on error
+			} else {
+				containerUpdated = true
+			}
+            }
+        }
+
+        // If not in swarm mode, no service ID found, or service update failed, recreate container
+        if !containerUpdated {
+            if err := r.DockerClient.RecreateContainer(ctx, container.ID, spec, container.Image); err != nil {
+                // Check if the error is because the container is managed by swarm
+                if err == docker.ErrContainerManagedBySwarm {
+                    slog.Info("Container is managed by swarm, attempting service update", "container_id", container.ID)
+// Try to get service ID and update service as fallback
+						serviceID, err := r.DockerClient.GetServiceID(ctx, container.ID)
+						if err == nil && serviceID != "" {
+							slog.Info("Updating service for swarm-managed container", "container_id", container.ID, "service_id", serviceID)
+							serviceSpec := docker.ServiceSpec{}
+							serviceSpec.TaskTemplate.ContainerSpec.Image = container.Image
+							if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
+								slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "error", err)
+								continue // Continue to next container
+							}
+						} else {
+							slog.Error("Failed to get service ID for swarm-managed container", "container_id", container.ID, "error", err)
+							continue // Continue to next container
+						}
+                } else {
+                    slog.Error("Failed to recreate container", "container_id", container.ID, "error", err)
+                    continue // Continue to next container
+                }
+            }
+        }
+
+        // Notify about the update
+        notification := notifier.Notification{
+            Subject: fmt.Sprintf("Container %s updated", container.ID),
+            Body:    fmt.Sprintf("Container %s was updated from digest %s to %s", container.ID, currentDigest, latestDigest),
+            Level:   "info",
+        }
+        if err := r.Notifier.Notify(ctx, notification); err != nil {
+            slog.Error("Failed to send notification", "container_id", container.ID, "error", err)
+            // Continue even if notification fails
+        }
+
+        slog.Info("Container updated successfully", "container_id", container.ID)
+    }
+
+    slog.Info("Reconciliation completed")
+    return nil
+}

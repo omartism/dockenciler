@@ -1,0 +1,16 @@
+{
+  "registry": {
+    "type": "ecr",
+    "region": "us-east-1"
+  },
+  "docker": {
+    "socket_path": "/var/run/docker.sock",
+    "label_filter": "dockenciler.autoupdate=true"
+  },
+  "reconcile_interval": "15m",
+  "log_level": "info",
+  "criteria": {
+    "version": "latest"
+  },
+  "dry_run": false
+}
