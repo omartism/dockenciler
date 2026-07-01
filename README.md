@@ -76,8 +76,6 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-    labels:
-      - "traefik.enable=false"
     deploy:
       placement:
         constraints:
