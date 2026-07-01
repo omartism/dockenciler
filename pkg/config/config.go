@@ -48,7 +48,18 @@ func LoadConfig(path string) (*Config, error) {
     // Enable environment variable overrides with DOCKENCILER prefix
     v.SetEnvPrefix("DOCKENCILER")
     v.AutomaticEnv()
-    
+
+    // Set defaults so AutomaticEnv knows which keys to look for
+    v.SetDefault("registry.type", "")
+    v.SetDefault("registry.region", "")
+    v.SetDefault("registry.access_key", "")
+    v.SetDefault("registry.secret_key", "")
+    v.SetDefault("docker.socket_path", "/var/run/docker.sock")
+    v.SetDefault("docker.label_filter", "dockenciler.autoupdate=true")
+    v.SetDefault("reconcile_interval", "1h")
+    v.SetDefault("log_level", "info")
+    v.SetDefault("dry_run", false)
+
     // Handle nested structs by replacing dots with underscores
     v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
     
@@ -65,20 +76,7 @@ func LoadConfig(path string) (*Config, error) {
     if err := v.Unmarshal(&config); err != nil {
         return nil, fmt.Errorf("failed to unmarshal config: %w", err)
     }
-    
-    // Set default values for Docker settings if empty
-    if config.Docker.SocketPath == "" {
-        config.Docker.SocketPath = "/var/run/docker.sock"
-    }
-    if config.Docker.LabelFilter == "" {
-        config.Docker.LabelFilter = "dockenciler.autoupdate=true"
-    }
-    
-    // Set default values for new fields if empty
-    if config.DryRun == false {
-        config.DryRun = false
-    }
-    
+
     return &config, nil
 }
 
