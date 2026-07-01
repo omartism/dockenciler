@@ -25,6 +25,7 @@ jobs:
           format: 'table'
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
+          trivyignores: '.trivyignore'
 
       - name: Run Trivy filesystem scan (SARIF)
         uses: aquasecurity/trivy-action@master
@@ -34,6 +35,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-fs-results.sarif'
           severity: 'CRITICAL,HIGH'
+          trivyignores: '.trivyignore'
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3

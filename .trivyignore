@@ -1,0 +1,5 @@
+# Docker SDK v28.5.2 - waiting for upstream to release v29+ SDK
+# These CVEs affect Docker Engine, not the Go SDK client library
+CVE-2026-34040
+CVE-2026-41567
+CVE-2026-42306

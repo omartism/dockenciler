@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.42.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.27
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.47.0
-	github.com/docker/docker v28.1.1+incompatible
+	github.com/docker/docker v28.5.2+incompatible
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	gotest.tools/v3 v3.5.2
