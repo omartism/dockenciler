@@ -69,6 +69,19 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          tags: |
+            # Semver: v1.2.3 -> 1.2.3
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # Pre-release floating tags: v1.2.3-alpha.1 -> alpha, v1.2.3-beta.2 -> beta, v1.2.3-rc.1 -> rc
+            type=match,pattern=v\d+\.\d+\.\d+-(alpha)\.\d+,group=1
+            type=match,pattern=v\d+\.\d+\.\d+-(beta)\.\d+,group=1
+            type=match,pattern=v\d+\.\d+\.\d+-(rc)\.\d+,group=1
+            # Stable floating tag (only on non-pre-release)
+            type=raw,value=stable,enable=${{ !contains(github.ref_name, '-') }}
+            # Latest (only on non-pre-release)
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7

@@ -7,6 +7,7 @@ import (
     "log/slog"
     "net/http"
     "strings"
+    "sync"
     "testing"
     "time"
 
@@ -16,22 +17,35 @@ import (
 
 // MockNotifier is a mock implementation of the Notifier interface for testing
 type MockNotifier struct {
+    mu            sync.Mutex
     notifications []Notification
-    mu            chan struct{}
+    called        chan struct{}
 }
 
 func NewMockNotifier() *MockNotifier {
     return &MockNotifier{
         notifications: make([]Notification, 0),
-        mu:            make(chan struct{}, 1),
+        called:        make(chan struct{}, 1),
     }
 }
 
 func (m *MockNotifier) Notify(ctx context.Context, n Notification) error {
-    m.mu <- struct{}{}
+    m.mu.Lock()
     m.notifications = append(m.notifications, n)
-    <-m.mu
+    m.mu.Unlock()
+    select {
+    case m.called <- struct{}{}:
+    default:
+    }
     return nil
+}
+
+func (m *MockNotifier) GetNotifications() []Notification {
+    m.mu.Lock()
+    defer m.mu.Unlock()
+    result := make([]Notification, len(m.notifications))
+    copy(result, m.notifications)
+    return result
 }
 
 func TestLogNotifier(t *testing.T) {
@@ -86,14 +100,14 @@ func TestCompositeNotifier_Dispatch(t *testing.T) {
     time.Sleep(100 * time.Millisecond)
 
     // Verify all notifiers received the notification
-    assert.Len(t, notifier1.notifications, 1)
-    assert.Len(t, notifier2.notifications, 1)
-    assert.Len(t, notifier3.notifications, 1)
+    assert.Len(t, notifier1.GetNotifications(), 1)
+    assert.Len(t, notifier2.GetNotifications(), 1)
+    assert.Len(t, notifier3.GetNotifications(), 1)
 
     // Verify the notification content
-    assert.Equal(t, n.Subject, notifier1.notifications[0].Subject)
-    assert.Equal(t, n.Body, notifier1.notifications[0].Body)
-    assert.Equal(t, n.Level, notifier1.notifications[0].Level)
+    assert.Equal(t, n.Subject, notifier1.GetNotifications()[0].Subject)
+    assert.Equal(t, n.Body, notifier1.GetNotifications()[0].Body)
+    assert.Equal(t, n.Level, notifier1.GetNotifications()[0].Level)
 }
 
 func TestCompositeNotifier_ContextCancellation(t *testing.T) {
@@ -130,7 +144,7 @@ func TestCompositeNotifier_ContextCancellation(t *testing.T) {
     }
 
     // Verify the notification was not added to the notifier
-    assert.Len(t, blockingNotifier.notifications, 0)
+    assert.Len(t, blockingNotifier.GetNotifications(), 0)
 }
 
 func TestSlackNotifier(t *testing.T) {

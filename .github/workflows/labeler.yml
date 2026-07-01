@@ -3,9 +3,13 @@ name: Labeler
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+  issues:
+    types: [opened]
 
 jobs:
-  label:
+  label-pr:
+    name: Label PR
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -15,3 +19,51 @@ jobs:
       - uses: actions/labeler@v5
         with:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
+
+  label-issue:
+    name: Label Issue
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = (issue.title || '').toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const text = `${title} ${body}`;
+            const labels = [];
+
+            if (text.match(/\b(bug|error|crash|fail|broken|fix)\b/)) {
+              labels.push('bug');
+            }
+            if (text.match(/\b(feature|enhancement|improve|add|request)\b/)) {
+              labels.push('enhancement');
+            }
+            if (text.match(/\b(question|how|help|support)\b/)) {
+              labels.push('question');
+            }
+            if (text.match(/\b(documentation|docs|readme|typo)\b/)) {
+              labels.push('documentation');
+            }
+            if (text.match(/\b(dependency|deps|upgrade|update|go mod)\b/)) {
+              labels.push('dependencies');
+            }
+            if (text.match(/\b(docker|container|image|compose|swarm)\b/)) {
+              labels.push('docker');
+            }
+            if (text.match(/\b(ci|github actions|workflow|action|pipeline)\b/)) {
+              labels.push('github_actions');
+            }
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+            }

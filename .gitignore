@@ -34,3 +34,4 @@ go.work.sum
 .agents/
 skills-lock.json
 .slim/
+VERSIONING.md
