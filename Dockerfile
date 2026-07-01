@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Copy go mod and sum files
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 # Copy source code
 COPY . .
@@ -17,7 +17,7 @@ COPY . .
 # Build the application
 # -ldflags="-s -w" strips symbol table and debug information to reduce binary size
 # CGO_ENABLED=0 ensures a statically linked binary for scratch/distroless images
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o dockenciler ./cmd/dockenciler
+RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg/mod CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o dockenciler ./cmd/dockenciler
 
 # Final stage
 FROM gcr.io/distroless/static-debian12:latest
