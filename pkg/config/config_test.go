@@ -140,27 +140,27 @@ func TestSetupLogging(t *testing.T) {
     // and not printed when level is "info"
     
     // Test with debug level
-    SetupLogging("debug")
+    SetupLogging("debug", true)
     // When level is debug, both debug and info messages should be printed
     // We can't easily capture this without mocking, but we can at least verify
     // that the function doesn't panic
     
     // Test with info level  
-    SetupLogging("info")
+    SetupLogging("info", true)
     // When level is info, debug messages should not be printed
     // Again, we can't easily capture this without mocking
     
     // Test with warn level
-    SetupLogging("warn")
+    SetupLogging("warn", true)
     
     // Test with error level
-    SetupLogging("error")
+    SetupLogging("error", true)
     
     // Test with unknown level (should default to info)
-    SetupLogging("unknown")
+    SetupLogging("unknown", true)
     
     // Test with empty level (should default to info)
-    SetupLogging("")
+    SetupLogging("", false)
 }
 
 // Helper function to load config from string (for testing)

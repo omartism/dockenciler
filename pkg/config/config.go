@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -34,6 +35,7 @@ type Config struct {
 	ReconcileInterval string        `json:"reconcile_interval" mapstructure:"reconcile_interval"`
 	LogLevel          string        `json:"log_level" mapstructure:"log_level"`
 	Criteria          Criteria      `json:"criteria" mapstructure:"criteria"`
+	ColorLogs         bool          `json:"color_logs" mapstructure:"color_logs"`
 	DryRun            bool          `json:"dry_run" mapstructure:"dry_run"`
 	Exclusions        []string      `json:"exclusions" mapstructure:"exclusions"`
 }
@@ -86,6 +88,7 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetDefault("reconcile_interval", "1h")
 	v.SetDefault("log_level", "info")
 	v.SetDefault("dry_run", false)
+	v.SetDefault("color_logs", true)
 	v.SetDefault("notifications.slack_webhook_url", "")
 	v.SetDefault("notifications.discord_webhook_url", "")
 	v.SetDefault("notifications.telegram_bot_token", "")
@@ -126,7 +129,7 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
-func SetupLogging(level string) {
+func SetupLogging(level string, colorLogs bool) {
 	// Map the level string (case-insensitive) to slog.Level
 	var slogLevel slog.Level
 	switch strings.ToLower(level) {
@@ -143,6 +146,10 @@ func SetupLogging(level string) {
 		slogLevel = slog.LevelInfo
 	}
 
-	// Set the global logger
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slogLevel})))
+	// Set the global logger with optional colorized output
+	var out io.Writer = os.Stdout
+	if colorLogs {
+		out = NewColorWriter(os.Stdout)
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: slogLevel})))
 }

@@ -31,7 +31,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	config.SetupLogging(cfg.LogLevel)
+	config.SetupLogging(cfg.LogLevel, cfg.ColorLogs)
+
+	printBanner()
 
 	dockerClient, err := docker.NewDockerClient()
 	if err != nil {
@@ -95,6 +97,18 @@ func getConfigPath() string {
 		return os.Args[1]
 	}
 	return ""
+}
+
+func printBanner() {
+	banner := `
+  ____                           _                _       
+ |  _ \ _ __ ___  ___  ___  _ __| |___      _____| | ___  
+ | | | | '__/ _ \/ __|/ _ \| '__| __\ \ /\ / / _ \ |/ _ \ 
+ | |_| | | |  __/\__ \ (_) | |  | |_ \ V  V /  __/ | (_) |
+ |____/|_|  \___||___/\___/|_|   \__| \_/\_/ \___|_|\___/ 
+`
+	slog.Info(banner)
+	slog.Info("Dockenciler started", "version", "alpha")
 }
 
 func newECRProvider(ctx context.Context, cfg *config.Config) (*registry.ECRProvider, error) {
