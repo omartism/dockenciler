@@ -128,6 +128,7 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
 | `DOCKENCILER_CRITERIA_REGEX` | `criteria.regex` | Regex to match tags | - |
 | `DOCKENCILER_CRITERIA_DIGEST` | `criteria.digest` | Exact image digest to match | - |
 | `DOCKENCILER_EXCLUSIONS` | `exclusions` | Comma-separated list of container IDs to skip | `[]` |
+| `DOCKENCILER_TIMEZONE` | `timezone` | Timezone for notification timestamps (IANA name or `Host`) | `Host` |
 | `DOCKENCILER_SLACK_WEBHOOK_URL` | `notifications.slack_webhook_url` | Slack webhook URL | - |
 | `DOCKENCILER_DISCORD_WEBHOOK_URL` | `notifications.discord_webhook_url` | Discord webhook URL | - |
 | `DOCKENCILER_TELEGRAM_BOT_TOKEN` | `notifications.telegram_bot_token` | Telegram bot token | - |
@@ -169,6 +170,7 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
   },
   "dry_run": false,
   "exclusions": ["container_id_1", "container_id_2"],
+  "timezone": "America/New_York",
   "notifications": {
     "slack_webhook_url": "<your-slack-webhook-url>",
     "templates": {

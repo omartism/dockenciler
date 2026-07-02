@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -38,6 +39,7 @@ type Config struct {
 	ColorLogs         bool          `json:"color_logs" mapstructure:"color_logs"`
 	DryRun            bool          `json:"dry_run" mapstructure:"dry_run"`
 	Exclusions        []string      `json:"exclusions" mapstructure:"exclusions"`
+	Timezone          string        `json:"timezone" mapstructure:"timezone"`
 }
 
 type Notifications struct {
@@ -108,6 +110,7 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetDefault("notifications.templates.email", "")
 	v.SetDefault("notifications.templates.msteams", "")
 	v.SetDefault("notifications.templates.google_chat", "")
+	v.SetDefault("timezone", "Host")
 
 	// Handle nested structs by replacing dots with underscores
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -152,4 +155,18 @@ func SetupLogging(level string, colorLogs bool) {
 		out = NewColorWriter(os.Stdout)
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: slogLevel})))
+}
+
+// ResolveTimezone resolves a timezone string to a *time.Location.
+// "Host" or empty returns time.Local (system timezone).
+// Any other string is treated as an IANA timezone name.
+func ResolveTimezone(tz string) (*time.Location, error) {
+	if tz == "" || tz == "Host" {
+		return time.Local, nil
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return nil, fmt.Errorf("invalid timezone %q: %w", tz, err)
+	}
+	return loc, nil
 }

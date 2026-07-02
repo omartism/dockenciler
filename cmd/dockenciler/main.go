@@ -33,6 +33,12 @@ func main() {
 
 	config.SetupLogging(cfg.LogLevel, cfg.ColorLogs)
 
+	loc, err := config.ResolveTimezone(cfg.Timezone)
+	if err != nil {
+		slog.Error("Invalid timezone", "timezone", cfg.Timezone, "error", err)
+		os.Exit(1)
+	}
+
 	printBanner()
 
 	dockerClient, err := docker.NewDockerClient()
@@ -62,6 +68,7 @@ func main() {
 		Registry:     reg,
 		Notifier:     notif,
 		Config:       cfg,
+		Location:     loc,
 	}
 
 	interval, err := time.ParseDuration(cfg.ReconcileInterval)
@@ -70,7 +77,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	slog.Info("Starting dockenciler", "interval", interval, "label_filter", cfg.Docker.LabelFilter)
+	slog.Info("Starting dockenciler", "interval", interval, "label_filter", cfg.Docker.LabelFilter, "timezone", cfg.Timezone)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

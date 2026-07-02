@@ -36,7 +36,8 @@ type Reconciler struct {
 	Notifier interface {
 		Notify(ctx context.Context, n notifier.Notification) error
 	}
-	Config *config.Config
+	Config   *config.Config
+	Location *time.Location
 }
 
 func convertConfigCriteriaToRegistryCriteria(configCriteria config.Criteria) registry.Criteria {
@@ -57,10 +58,21 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 
 	slog.Info("Starting reconciliation", "container_count", len(containers))
 
+	var (
+		checked   int
+		updated   int
+		upToDate  int
+		skipped   int
+		failed    int
+		skipLog   []string
+	)
+
 	for _, container := range containers {
 		// Skip self-update: containers with dockenciler.instance=true label
 		if container.Labels != nil && container.Labels["dockenciler.instance"] == "true" {
 			slog.Info("Skipping self-update container", "container_id", container.ID)
+			skipped++
+			skipLog = append(skipLog, fmt.Sprintf("%s (self-update)", shortID(container.ID)))
 			continue
 		}
 
@@ -76,6 +88,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			}
 		}
 		if isExcluded {
+			skipped++
+			skipLog = append(skipLog, fmt.Sprintf("%s (excluded)", shortID(container.ID)))
 			continue
 		}
 
@@ -85,6 +99,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		currentDigest, err := r.DockerClient.GetImageDigest(ctx, container.Image)
 		if err != nil {
 			slog.Error("Failed to get current image digest", "container_id", container.ID, "image", container.Image, "error", err)
+			failed++
 			continue // Continue to next container
 		}
 
@@ -96,15 +111,19 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		latestDigest, err := r.Registry.GetLatestDigest(ctx, container.Image, criteria)
 		if err != nil {
 			slog.Error("Failed to get latest digest", "container_id", container.ID, "image", container.Image, "error", err)
+			failed++
 			continue // Continue to next container
 		}
 
 		// Debug log for latest digest
 		slog.Debug("Got latest registry digest", "container_id", container.ID, "image", container.Image, "digest", latestDigest)
 
+		checked++
+
 		// Compare digests
 		if currentDigest == latestDigest {
 			slog.Info("Container is up to date", "container_id", container.ID, "image", container.Image, "digest", currentDigest)
+			upToDate++
 			continue
 		}
 
@@ -121,18 +140,21 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		registryURL, token, err := r.Registry.GetAuthToken(ctx)
 		if err != nil {
 			slog.Error("Failed to get auth token from registry", "container_id", container.ID, "image", container.Image, "error", err)
+			failed++
 			continue // Continue to next container
 		}
 
 		// Authenticate with Docker daemon
 		if err := r.DockerClient.Authenticate(ctx, registryURL, token); err != nil {
 			slog.Error("Failed to authenticate with Docker daemon", "container_id", container.ID, "image", container.Image, "error", err)
+			failed++
 			continue // Continue to next container
 		}
 
 		// Pull the new image
 		if err := r.DockerClient.PullImage(ctx, container.Image); err != nil {
 			slog.Error("Failed to pull image", "container_id", container.ID, "image", container.Image, "error", err)
+			failed++
 			continue // Continue to next container
 		}
 
@@ -140,6 +162,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		spec, err := r.DockerClient.InspectContainer(ctx, container.ID)
 		if err != nil {
 			slog.Error("Failed to inspect container", "container_id", container.ID, "image", container.Image, "error", err)
+			failed++
 			continue // Continue to next container
 		}
 
@@ -183,14 +206,17 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 						serviceSpec.TaskTemplate.ContainerSpec.Image = container.Image
 						if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
 							slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "error", err)
+							failed++
 							continue // Continue to next container
 						}
 					} else {
 						slog.Error("Failed to get service ID for swarm-managed container", "container_id", container.ID, "image", container.Image, "error", err)
+						failed++
 						continue // Continue to next container
 					}
 				} else {
 					slog.Error("Failed to recreate container", "container_id", container.ID, "image", container.Image, "error", err)
+					failed++
 					continue // Continue to next container
 				}
 			}
@@ -206,6 +232,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			OldDigest:   currentDigest,
 			NewDigest:   latestDigest,
 			Timestamp:   time.Now(),
+			Location:    r.Location,
 		}
 		if err := r.Notifier.Notify(ctx, notification); err != nil {
 			slog.Error("Failed to send notification", "container_id", container.ID, "image", container.Image, "error", err)
@@ -213,8 +240,40 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		}
 
 		slog.Info("Container updated successfully", "container_id", container.ID, "image", container.Image)
+		updated++
 	}
 
-	slog.Info("Reconciliation completed")
+	// Print reconciliation summary
+	slog.Info("Reconciliation completed",
+		"total", len(containers),
+		"checked", checked,
+		"up_to_date", upToDate,
+		"updated", updated,
+		"skipped", skipped,
+		"failed", failed,
+	)
+	if len(skipLog) > 0 {
+		slog.Info("Skipped containers", "containers", fmt.Sprintf("[%s]", joinStrings(skipLog, ", ")))
+	}
 	return nil
+}
+
+// shortID returns the first 12 characters of a container ID for compact display.
+func shortID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
+}
+
+// joinStrings joins a slice of strings with a separator.
+func joinStrings(strs []string, sep string) string {
+	result := ""
+	for i, s := range strs {
+		if i > 0 {
+			result += sep
+		}
+		result += s
+	}
+	return result
 }

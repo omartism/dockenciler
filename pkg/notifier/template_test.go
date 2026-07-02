@@ -16,6 +16,7 @@ func testNotification() Notification {
 		Body:        "Container abc123 was updated from digest sha256:old to sha256:new",
 		Level:       "info",
 		Timestamp:   time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+		Location:    time.UTC,
 		ContainerID: "abc123",
 		Image:       "myregistry.com/myapp:v1.2.3",
 		OldDigest:   "sha256:old",
@@ -81,6 +82,7 @@ func TestRenderTemplate_EmptyFields(t *testing.T) {
 		Body:      "Body",
 		Level:     "info",
 		Timestamp: time.Now(),
+		Location:  time.UTC,
 	}
 	tmpl := `ID: {{.ContainerID}} Image: {{.Image}} Old: {{.OldDigest}} New: {{.NewDigest}}`
 	result, err := RenderTemplate(tmpl, n)

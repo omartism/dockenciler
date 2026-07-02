@@ -28,6 +28,7 @@ Configured via JSON or `DOCKENCILER_` environment variables (priority).
 - `DOCKENCILER_DOCKER_LABEL_FILTER`: Target containers (default: `dockenciler.autoupdate=true`).
 - `DOCKENCILER_REGISTRY_TYPE`: Registry type (e.g., `ecr`).
 - `DOCKENCILER_CRITERIA_REGEX`: Regex for image tag matching.
+- `DOCKENCILER_TIMEZONE`: Timezone for notification timestamps (IANA name or `Host`, default: `Host`).
 
 ## Operational Notes
 - **Permissions**: Requires access to `/var/run/docker.sock`.

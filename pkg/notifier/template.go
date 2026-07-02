@@ -12,25 +12,25 @@ const (
 Image: {{.Image}}
 Digest: {{.OldDigest}} → {{.NewDigest}}
 Level: {{.Level}}
-Time: {{.Timestamp.Format "2006-01-02 15:04:05 UTC"}}`
+Time: {{(.Timestamp.In .Location).Format "2006-01-02 15:04:05 MST"}}`
 
 	DefaultSlackTemplate = `*Container {{.ContainerID}} updated*
 Image: {{.Image}}
 Digest: {{.OldDigest}} → {{.NewDigest}}
 Level: {{.Level}}
-Time: {{.Timestamp.Format "2006-01-02 15:04:05 UTC"}}`
+Time: {{(.Timestamp.In .Location).Format "2006-01-02 15:04:05 MST"}}`
 
 	DefaultDiscordTemplate = `**Container {{.ContainerID}} updated**
 Image: {{.Image}}
 Digest: {{.OldDigest}} → {{.NewDigest}}
 Level: {{.Level}}
-Time: {{.Timestamp.Format "2006-01-02 15:04:05 UTC"}}`
+Time: {{(.Timestamp.In .Location).Format "2006-01-02 15:04:05 MST"}}`
 
 	DefaultTelegramTemplate = `*Container {{.ContainerID}} updated*
 Image: {{.Image}}
 Digest: {{.OldDigest}} → {{.NewDigest}}
 Level: {{.Level}}
-Time: {{.Timestamp.Format "2006-01-02 15:04:05 UTC"}}`
+Time: {{(.Timestamp.In .Location).Format "2006-01-02 15:04:05 MST"}}`
 
 	DefaultEmailSubjectTemplate = `Container {{.ContainerID}} updated`
 	DefaultEmailBodyTemplate    = `Container {{.ContainerID}} has been updated.
@@ -39,19 +39,19 @@ Image:      {{.Image}}
 Old Digest: {{.OldDigest}}
 New Digest: {{.NewDigest}}
 Level:      {{.Level}}
-Timestamp:  {{.Timestamp.Format "2006-01-02 15:04:05 UTC"}}`
+Timestamp:  {{(.Timestamp.In .Location).Format "2006-01-02 15:04:05 MST"}}`
 
 	DefaultMSTeamsTemplate = `**Container {{.ContainerID}} updated**
 Image: {{.Image}}
 Digest: {{.OldDigest}} → {{.NewDigest}}
 Level: {{.Level}}
-Time: {{.Timestamp.Format "2006-01-02 15:04:05 UTC"}}`
+Time: {{(.Timestamp.In .Location).Format "2006-01-02 15:04:05 MST"}}`
 
 	DefaultGoogleChatTemplate = `Container *{{.ContainerID}}* updated
 Image: {{.Image}}
 Digest: {{.OldDigest}} → {{.NewDigest}}
 Level: {{.Level}}
-Time: {{.Timestamp.Format "2006-01-02 15:04:05 UTC"}}`
+Time: {{(.Timestamp.In .Location).Format "2006-01-02 15:04:05 MST"}}`
 )
 
 // RenderTemplate parses and executes a Go text/template with the given notification data.

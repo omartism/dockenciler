@@ -18,6 +18,7 @@ type Notification struct {
 	Body          string
 	Level         string // "info", "warning", "error"
 	Timestamp     time.Time
+	Location      *time.Location
 	ContainerID   string
 	ContainerName string
 	Image         string
