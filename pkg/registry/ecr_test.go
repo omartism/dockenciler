@@ -288,7 +288,7 @@ func TestGetAuthToken(t *testing.T) {
         provider := NewECRProvider(mockClient)
         // Set the cache to be valid (expiry in the future)
         provider.mu.Lock()
-        provider.cachedToken = "dG9rZW46cGFzc3dvcmQ="
+        provider.cachedToken = "password" // decoded from base64 "dG9rZW46cGFzc3dvcmQ="
         provider.cachedRegistryURL = "https://example.com"
         provider.tokenExpiry = time.Now().Add(1 * time.Hour)
         provider.mu.Unlock()
@@ -299,7 +299,7 @@ func TestGetAuthToken(t *testing.T) {
         // Assertions
         assert.NoError(t, err)
         assert.Equal(t, "https://example.com", registryURL)
-        assert.Equal(t, "dG9rZW46cGFzc3dvcmQ=", token)
+        assert.Equal(t, "password", token)
         // Ensure the mock was not called
         assert.Equal(t, 0, mockClient.getAuthorizationTokenCallCount)
     })
@@ -319,7 +319,7 @@ func TestGetAuthToken(t *testing.T) {
         provider := NewECRProvider(mockClient)
         // Set the cache to be valid but with less than 5 minutes left (so it will be refreshed)
         provider.mu.Lock()
-        provider.cachedToken = "dG9rZW46cGFzc3dvcmQ="
+        provider.cachedToken = "old-password"
         provider.cachedRegistryURL = "https://old-example.com"
         provider.tokenExpiry = time.Now().Add(4 * time.Minute) // Expires in 4 minutes (<5 min)
         provider.mu.Unlock()
@@ -330,12 +330,12 @@ func TestGetAuthToken(t *testing.T) {
         // Assertions
         assert.NoError(t, err)
         assert.Equal(t, "https://new-example.com", registryURL)
-        assert.Equal(t, "dG9rZW46cGFzc3dvcmQ=", token)
+        assert.Equal(t, "password", token) // decoded from base64 "dG9rZW46cGFzc3dvcmQ="
         // Ensure the mock was called once
         assert.Equal(t, 1, mockClient.getAuthorizationTokenCallCount)
         // Ensure the cache was updated
         provider.mu.RLock()
-        assert.Equal(t, "dG9rZW46cGFzc3dvcmQ=", provider.cachedToken)
+        assert.Equal(t, "password", provider.cachedToken) // decoded value
         assert.Equal(t, "https://new-example.com", provider.cachedRegistryURL)
         // The expiry should be set to about 12 hours from now (allow a small margin for test execution time)
         assert.True(t, provider.tokenExpiry.After(time.Now().Add(11*time.Hour)), "expiry should be in the future")

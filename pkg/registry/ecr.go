@@ -113,16 +113,20 @@ func (p *ECRProvider) GetAuthToken(ctx context.Context) (string, string, error) 
         return "", "", fmt.Errorf("proxy endpoint is nil")
     }
 
-    // Decode the token to verify it's valid (optional but recommended)
-    if _, err := base64.StdEncoding.DecodeString(*data.AuthorizationToken); err != nil {
+    // Decode the base64 token. ECR returns "AWS:<password>" base64-encoded.
+    // Docker expects the decoded password as the password field.
+    decoded, err := base64.StdEncoding.DecodeString(*data.AuthorizationToken)
+    if err != nil {
         return "", "", fmt.Errorf("failed to decode authorization token: %w", err)
     }
-    // Optionally, you can validate the decoded token format here (e.g., contains colon)
-    // For now, we just use the encoded token as the token value, as that's what Docker expects.
-    // The token is usually used as the password in `docker login -u AWS -p <token> <registry>`
+    // Extract the password part after "AWS:"
+    tokenStr := string(decoded)
+    if idx := strings.Index(tokenStr, ":"); idx != -1 {
+        tokenStr = tokenStr[idx+1:]
+    }
 
-    // Cache the token and registry URL
-    p.cachedToken = *data.AuthorizationToken
+    // Cache the decoded token and registry URL
+    p.cachedToken = tokenStr
     p.cachedRegistryURL = *data.ProxyEndpoint
     // Set expiry: the token is valid for 12 hours, but we can also use the expiresAt if provided?
     // The AuthorizationData does not have an expiresAt field. According to AWS docs, the token is valid for 12 hours.
