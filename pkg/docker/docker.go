@@ -327,16 +327,7 @@ func toSwarmServiceSpec(spec ServiceSpec) swarm.ServiceSpec {
 				Image: spec.TaskTemplate.ContainerSpec.Image,
 			},
 		},
-		Mode: swarm.ServiceMode{
-			Replicated: &swarm.ReplicatedService{
-				Replicas: ptrToUint64(1), // Default to 1 replica
-			},
-		},
 	}
-}
-
-func ptrToUint64(i uint64) *uint64 {
-	return &i
 }
 
 // Helper functions from the original file
