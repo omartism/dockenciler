@@ -65,6 +65,15 @@ type ECRProvider struct {
     mu          sync.RWMutex
 }
 
+// InvalidateCache clears the cached token, registry URL, and resets token expiry
+func (p *ECRProvider) InvalidateCache() {
+    p.mu.Lock()
+    defer p.mu.Unlock()
+    p.cachedToken = ""
+    p.cachedRegistryURL = ""
+    p.tokenExpiry = time.Time{}
+}
+
 // NewECRProvider creates a new ECRProvider with the given ECR client implementation
 func NewECRProvider(client ECRClient) *ECRProvider {
     return &ECRProvider{
@@ -128,10 +137,12 @@ func (p *ECRProvider) GetAuthToken(ctx context.Context) (string, string, error) 
     // Cache the decoded token and registry URL
     p.cachedToken = tokenStr
     p.cachedRegistryURL = *data.ProxyEndpoint
-    // Set expiry: the token is valid for 12 hours, but we can also use the expiresAt if provided?
-    // The AuthorizationData does not have an expiresAt field. According to AWS docs, the token is valid for 12 hours.
-    // We'll set the expiry to 12 hours from now.
-    p.tokenExpiry = time.Now().Add(12 * time.Hour)
+    // Set expiry: use ExpiresAt from ECR response if available, otherwise fall back to 12 hours
+    if data.ExpiresAt != nil {
+        p.tokenExpiry = *data.ExpiresAt
+    } else {
+        p.tokenExpiry = time.Now().Add(12 * time.Hour)
+    }
 
     return p.cachedRegistryURL, p.cachedToken, nil
 }

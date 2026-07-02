@@ -14,6 +14,7 @@ type MockRegistry struct {
     GetLatestDigestFunc func(ctx context.Context, imageRef string, criteria registry.Criteria) (string, error)
     GetImageVersionFunc func(ctx context.Context, imageRef string) (string, error)
     GetAuthTokenFunc    func(ctx context.Context) (string, string, error) // returns registryURL and token
+    InvalidateCacheFunc func()
 }
 
 func (m *MockRegistry) GetLatestDigest(ctx context.Context, imageRef string, criteria registry.Criteria) (string, error) {
@@ -35,6 +36,12 @@ func (m *MockRegistry) GetAuthToken(ctx context.Context) (string, string, error)
         return m.GetAuthTokenFunc(ctx)
     }
     return "", "", nil
+}
+
+func (m *MockRegistry) InvalidateCache() {
+    if m.InvalidateCacheFunc != nil {
+        m.InvalidateCacheFunc()
+    }
 }
 
 // MockDockerClient is a mock implementation of the DockerClient interface

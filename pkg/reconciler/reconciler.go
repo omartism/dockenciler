@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/omarismael/dockenciler/pkg/config"
@@ -32,6 +33,7 @@ type Reconciler struct {
 		GetLatestDigest(ctx context.Context, imageRef string, criteria registry.Criteria) (string, error)
 		GetImageVersion(ctx context.Context, imageRef string) (string, error)
 		GetAuthToken(ctx context.Context) (string, string, error) // returns registryURL and token
+		InvalidateCache()
 	}
 	Notifier interface {
 		Notify(ctx context.Context, n notifier.Notification) error
@@ -151,11 +153,49 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			continue // Continue to next container
 		}
 
+		// Strip digest pin from image reference to ensure we pull the latest tag
+		imageRef := container.Image
+		if idx := strings.Index(imageRef, "@"); idx != -1 {
+			imageRef = imageRef[:idx]
+		}
+
 		// Pull the new image
-		if err := r.DockerClient.PullImage(ctx, container.Image); err != nil {
-			slog.Error("Failed to pull image", "container_id", container.ID, "image", container.Image, "error", err)
-			failed++
-			continue // Continue to next container
+		if err := r.DockerClient.PullImage(ctx, imageRef); err != nil {
+			// Check if error is related to authorization or credentials
+			if strings.Contains(err.Error(), "authorization failed") || strings.Contains(err.Error(), "no basic auth credentials") {
+				slog.Warn("Pull failed with auth error, invalidating cache and retrying", "container_id", container.ID, "image", container.Image, "error", err)
+				
+				// Invalidate cache
+				r.Registry.InvalidateCache()
+				
+				// Re-fetch token
+				registryURL, token, err2 := r.Registry.GetAuthToken(ctx)
+				if err2 != nil {
+					slog.Error("Failed to re-fetch auth token", "container_id", container.ID, "image", container.Image, "error", err2)
+					failed++
+					continue // Continue to next container
+				}
+				
+				// Re-authenticate
+				if err := r.DockerClient.Authenticate(ctx, registryURL, token); err != nil {
+					slog.Error("Failed to re-authenticate with Docker daemon", "container_id", container.ID, "image", container.Image, "error", err)
+					failed++
+					continue // Continue to next container
+				}
+				
+				// Retry pull once
+				if err := r.DockerClient.PullImage(ctx, imageRef); err != nil {
+					slog.Error("Failed to pull image after retry", "container_id", container.ID, "image", container.Image, "error", err)
+					failed++
+					continue // Continue to next container
+				}
+				
+				slog.Info("Pull succeeded after retry", "container_id", container.ID, "image", container.Image)
+			} else {
+				slog.Error("Failed to pull image", "container_id", container.ID, "image", container.Image, "error", err)
+				failed++
+				continue // Continue to next container
+			}
 		}
 
 		// Inspect container to get full spec

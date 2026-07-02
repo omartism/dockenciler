@@ -2,10 +2,12 @@ package docker
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -92,6 +94,8 @@ ImageInspectWithRaw(ctx context.Context, ref string) (types.ImageInspect, []byte
 
 type DockerClientImpl struct {
 	client DockerAPIClient
+	mu    sync.RWMutex
+	lastAuthConfig *registry.AuthConfig
 }
 
 func NewDockerClient() (*DockerClientImpl, error) {
@@ -159,7 +163,24 @@ func (d *DockerClientImpl) InspectContainer(ctx context.Context, id string) (Con
 }
 
 func (d *DockerClientImpl) PullImage(ctx context.Context, imageRef string) error {
-	_, err := d.client.ImagePull(ctx, imageRef, image.PullOptions{})
+	// Get the stored auth config
+	d.mu.RLock()
+	authConfig := d.lastAuthConfig
+	d.mu.RUnlock()
+
+	// Create pull options with encoded registry auth if available
+	pullOptions := image.PullOptions{}
+	if authConfig != nil {
+		// Encode the auth config as a base64 JSON string
+		authBytes, err := json.Marshal(authConfig)
+		if err != nil {
+			return fmt.Errorf("failed to marshal auth config: %w", err)
+		}
+		encodedAuth := base64.StdEncoding.EncodeToString(authBytes)
+		pullOptions.RegistryAuth = encodedAuth
+	}
+
+	_, err := d.client.ImagePull(ctx, imageRef, pullOptions)
 	return err
 }
 
@@ -268,6 +289,12 @@ func (d *DockerClientImpl) Authenticate(ctx context.Context, registryURL, token 
 		Password:      token,
 		ServerAddress: serverAddress,
 	}
+
+	// Store the auth config for use in PullImage
+	d.mu.Lock()
+	d.lastAuthConfig = &authConfig
+	d.mu.Unlock()
+
 	_, err := d.client.RegistryLogin(ctx, authConfig)
 	return err
 }

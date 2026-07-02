@@ -422,6 +422,98 @@ func TestGetAuthToken(t *testing.T) {
         assert.Error(t, err)
         assert.Contains(t, err.Error(), "proxy endpoint is nil")
     })
+
+    t.Run("invalidates cache when ExpiresAt is provided", func(t *testing.T) {
+        // Create a mock client that returns an ExpiresAt field
+        expiresAt := time.Now().Add(6 * time.Hour)
+        mockClient := &mockECRClient{
+            getAuthorizationTokenOutput: &ecr.GetAuthorizationTokenOutput{
+                AuthorizationData: []types.AuthorizationData{
+                    {
+                        AuthorizationToken: aws.String("dG9rZW46cGFzc3dvcmQ="),
+                        ProxyEndpoint:        aws.String("https://example.com"),
+                        ExpiresAt:           &expiresAt,
+                    },
+                },
+            },
+            getAuthorizationTokenErr: nil,
+        }
+        provider := NewECRProvider(mockClient)
+
+        // Call GetAuthToken
+        registryURL, token, err := provider.GetAuthToken(context.Background())
+
+        // Assertions
+        assert.NoError(t, err)
+        assert.Equal(t, "https://example.com", registryURL)
+        assert.Equal(t, "password", token)
+        
+        // Verify that the expiry is set to the ExpiresAt value
+        provider.mu.RLock()
+        assert.Equal(t, expiresAt, provider.tokenExpiry)
+        provider.mu.RUnlock()
+    })
+
+    t.Run("invalidates cache when ExpiresAt is not provided", func(t *testing.T) {
+        mockClient := &mockECRClient{
+            getAuthorizationTokenOutput: &ecr.GetAuthorizationTokenOutput{
+                AuthorizationData: []types.AuthorizationData{
+                    {
+                        AuthorizationToken: aws.String("dG9rZW46cGFzc3dvcmQ="),
+                        ProxyEndpoint:        aws.String("https://example.com"),
+                        // No ExpiresAt field
+                    },
+                },
+            },
+            getAuthorizationTokenErr: nil,
+        }
+        provider := NewECRProvider(mockClient)
+
+        // Call GetAuthToken
+        registryURL, token, err := provider.GetAuthToken(context.Background())
+
+        // Assertions
+        assert.NoError(t, err)
+        assert.Equal(t, "https://example.com", registryURL)
+        assert.Equal(t, "password", token)
+        
+        // Verify that the expiry is set to 12 hours from now
+        provider.mu.RLock()
+        assert.True(t, provider.tokenExpiry.After(time.Now().Add(11*time.Hour)))
+        assert.True(t, provider.tokenExpiry.Before(time.Now().Add(13*time.Hour)))
+        provider.mu.RUnlock()
+    })
+
+    t.Run("invalidates cache when ExpiresAt is nil", func(t *testing.T) {
+        var expiresAt *time.Time = nil
+        mockClient := &mockECRClient{
+            getAuthorizationTokenOutput: &ecr.GetAuthorizationTokenOutput{
+                AuthorizationData: []types.AuthorizationData{
+                    {
+                        AuthorizationToken: aws.String("dG9rZW46cGFzc3dvcmQ="),
+                        ProxyEndpoint:        aws.String("https://example.com"),
+                        ExpiresAt:           expiresAt,
+                    },
+                },
+            },
+            getAuthorizationTokenErr: nil,
+        }
+        provider := NewECRProvider(mockClient)
+
+        // Call GetAuthToken
+        registryURL, token, err := provider.GetAuthToken(context.Background())
+
+        // Assertions
+        assert.NoError(t, err)
+        assert.Equal(t, "https://example.com", registryURL)
+        assert.Equal(t, "password", token)
+        
+        // Verify that the expiry is set to 12 hours from now
+        provider.mu.RLock()
+        assert.True(t, provider.tokenExpiry.After(time.Now().Add(11*time.Hour)))
+        assert.True(t, provider.tokenExpiry.Before(time.Now().Add(13*time.Hour)))
+        provider.mu.RUnlock()
+    })
 }
 
 // TestGetAuthTokenConcurrent tests that multiple concurrent calls to GetAuthToken
