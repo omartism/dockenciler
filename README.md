@@ -140,6 +140,13 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
 | `DOCKENCILER_EMAIL_TO` | `notifications.email_to` | Recipient email address | - |
 | `DOCKENCILER_MSTEAMS_WEBHOOK_URL` | `notifications.msteams_webhook_url` | Microsoft Teams webhook URL | - |
 | `DOCKENCILER_GOOGLE_CHAT_WEBHOOK_URL` | `notifications.google_chat_webhook_url` | Google Chat webhook URL | - |
+| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_DEFAULT` | `notifications.templates.default` | Default notification template (Go text/template) | Built-in |
+| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_SLACK` | `notifications.templates.slack` | Slack-specific template override | `default` |
+| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_DISCORD` | `notifications.templates.discord` | Discord-specific template override | `default` |
+| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_TELEGRAM` | `notifications.templates.telegram` | Telegram-specific template override | `default` |
+| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_EMAIL` | `notifications.templates.email` | Email body template override | `default` |
+| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_MSTEAMS` | `notifications.templates.msteams` | MS Teams-specific template override | `default` |
+| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_GOOGLE_CHAT` | `notifications.templates.google_chat` | Google Chat-specific template override | `default` |
 
 ### Example Configuration (`config.json`)
 
@@ -161,7 +168,14 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
     "regex": "^v\\d+\\.\\d+\\.\\d+$"
   },
   "dry_run": false,
-  "exclusions": ["container_id_1", "container_id_2"]
+  "exclusions": ["container_id_1", "container_id_2"],
+  "notifications": {
+    "slack_webhook_url": "<your-slack-webhook-url>",
+    "templates": {
+      "default": "Container {{.ContainerID}} updated!\nImage: {{.Image}}\nOld: {{.OldDigest}}\nNew: {{.NewDigest}}",
+      "slack": "*{{.ContainerID}}* updated on {{.Image}}"
+    }
+  }
 }
 ```
 
@@ -282,13 +296,107 @@ Or in `config.json`:
 
 ### Notification Format
 
-When a container is updated, Dockenciler sends a notification with:
+When a container is updated, Dockenciler sends a notification with the following data fields available for templating:
 
-- **Subject**: `Container <container_id> updated`
-- **Body**: `Container <container_id> was updated from digest <old_digest> to <new_digest>`
-- **Level**: `info`
+| Field | Description |
+|-------|-------------|
+| `{{.ContainerID}}` | The Docker container ID |
+| `{{.Image}}` | The full image reference (e.g., `myregistry.com/myapp:v1.2.3`) |
+| `{{.OldDigest}}` | The previous image digest |
+| `{{.NewDigest}}` | The new image digest |
+| `{{.Level}}` | Notification level (`info`, `warning`, `error`) |
+| `{{.Timestamp}}` | Time of the update (Go `time.Time`) |
+| `{{.Subject}}` | Default subject line |
+| `{{.Body}}` | Default body text |
 
-Logs are always written to stdout regardless of other notification providers.
+### Notification Templates
+
+Dockenciler supports customizable notification templates using Go's `text/template` syntax. You can override the default template globally or per-provider.
+
+#### Default Templates
+
+Each provider has a built-in default template. For example, the default template renders as:
+
+```
+Container abc123 updated
+Image: myregistry.com/myapp:v1.2.3
+Digest: sha256:old → sha256:new
+Level: info
+Time: 2025-01-15 10:30:00 UTC
+```
+
+#### Custom Templates
+
+Override the default template by setting the `templates` configuration:
+
+**Environment Variables:**
+
+```bash
+# Override all providers
+export DOCKENCILER_NOTIFICATIONS_TEMPLATES_DEFAULT='Container {{.ContainerID}} updated!\nImage: {{.Image}}\nOld: {{.OldDigest}}\nNew: {{.NewDigest}}'
+
+# Override a specific provider
+export DOCKENCILER_NOTIFICATIONS_TEMPLATES_SLACK='*{{.ContainerID}}* updated on {{.Image}}'
+export DOCKENCILER_NOTIFICATIONS_TEMPLATES_DISCORD='**{{.ContainerID}}** updated'
+export DOCKENCILER_NOTIFICATIONS_TEMPLATES_TELEGRAM='*{{.ContainerID}}* updated'
+export DOCKENCILER_NOTIFICATIONS_TEMPLATES_EMAIL='Container {{.ContainerID}} updated'
+export DOCKENCILER_NOTIFICATIONS_TEMPLATES_MSTEAMS='**{{.ContainerID}}** updated'
+export DOCKENCILER_NOTIFICATIONS_TEMPLATES_GOOGLE_CHAT='*{{.ContainerID}}* updated'
+```
+
+**config.json:**
+
+```json
+{
+  "notifications": {
+    "slack_webhook_url": "<your-slack-webhook-url>",
+    "templates": {
+      "default": "Container {{.ContainerID}} updated!\nImage: {{.Image}}\nOld: {{.OldDigest}}\nNew: {{.NewDigest}}",
+      "slack": "*{{.ContainerID}}* updated on {{.Image}}",
+      "discord": "**{{.ContainerID}}** updated",
+      "telegram": "*{{.ContainerID}}* updated",
+      "email": "Container {{.ContainerID}} updated",
+      "msteams": "**{{.ContainerID}}** updated",
+      "google_chat": "*{{.ContainerID}}* updated"
+    }
+  }
+}
+```
+
+#### Template Priority
+
+Per-provider templates take precedence over the `default` template. If a provider template is empty, the `default` template is used. If `default` is also empty, the built-in default template is used.
+
+**Priority order:** Provider-specific > `default` > Built-in default
+
+#### Template Examples
+
+**Slack with rich formatting:**
+```json
+{
+  "templates": {
+    "slack": ":white_check_mark: *Container {{.ContainerID}}* updated\n> Image: `{{.Image}}`\n> Old digest: `{{.OldDigest}}`\n> New digest: `{{.NewDigest}}`"
+  }
+}
+```
+
+**Email with structured body:**
+```json
+{
+  "templates": {
+    "email": "Container {{.ContainerID}} has been updated.\n\nImage:      {{.Image}}\nOld Digest: {{.OldDigest}}\nNew Digest: {{.NewDigest}}\nTimestamp:  {{.Timestamp.Format \"2006-01-02 15:04:05 UTC\"}}"
+  }
+}
+```
+
+**Minimal Telegram notification:**
+```json
+{
+  "templates": {
+    "telegram": "Updated: *{{.ContainerID}}* ({{.Image}})"
+  }
+}
+```
 
 ## 📜 Versioning
 

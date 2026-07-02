@@ -193,8 +193,14 @@ func (p *ECRProvider) GetLatestDigest(ctx context.Context, imageRef string, crit
         result.ImageDetails = matchingImages
     }
 
-    // Sort images by pushed time (newest first)
+    // Sort images by pushed time (newest first), handling nil ImagePushedAt
     sort.Slice(result.ImageDetails, func(i, j int) bool {
+        if result.ImageDetails[i].ImagePushedAt == nil {
+            return false
+        }
+        if result.ImageDetails[j].ImagePushedAt == nil {
+            return true
+        }
         return result.ImageDetails[i].ImagePushedAt.After(*result.ImageDetails[j].ImagePushedAt)
     })
 
@@ -229,8 +235,14 @@ func (p *ECRProvider) GetImageVersion(ctx context.Context, imageRef string) (str
         return "", fmt.Errorf("no images found in repository %s", repo)
     }
 
-    // Sort images by pushed time (newest first)
+    // Sort images by pushed time (newest first), handling nil ImagePushedAt
     sort.Slice(result.ImageDetails, func(i, j int) bool {
+        if result.ImageDetails[i].ImagePushedAt == nil {
+            return false
+        }
+        if result.ImageDetails[j].ImagePushedAt == nil {
+            return true
+        }
         return result.ImageDetails[i].ImagePushedAt.After(*result.ImageDetails[j].ImagePushedAt)
     })
 

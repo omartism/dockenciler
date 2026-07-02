@@ -58,20 +58,24 @@ func TestLogNotifier(t *testing.T) {
 
     // Create a test notification
     n := Notification{
-        Subject:    "Test Subject",
-        Body:       "Test Body",
-        Level:      "info",
-        Timestamp:  time.Now(),
+        Subject:     "Test Subject",
+        Body:        "Test Body",
+        Level:       "info",
+        Timestamp:   time.Now(),
+        ContainerID: "container123",
+        Image:       "myapp:latest",
+        OldDigest:   "sha256:old",
+        NewDigest:   "sha256:new",
     }
 
     // Notify
     err := notifier.Notify(context.Background(), n)
     require.NoError(t, err)
 
-    // Verify the notification was logged
+    // Verify the notification was logged with template-rendered output
     assert.Len(t, logMessages, 1)
-    assert.Contains(t, logMessages[0], "Test Subject")
-    assert.Contains(t, logMessages[0], "Test Body")
+    assert.Contains(t, logMessages[0], "container123")
+    assert.Contains(t, logMessages[0], "myapp:latest")
 }
 
 func TestCompositeNotifier_Dispatch(t *testing.T) {
@@ -160,10 +164,14 @@ func TestSlackNotifier(t *testing.T) {
 
     // Create a test notification
     n := Notification{
-        Subject:    "Test Subject",
-        Body:       "Test Body",
-        Level:      "info",
-        Timestamp:  time.Now(),
+        Subject:     "Test Subject",
+        Body:        "Test Body",
+        Level:       "info",
+        Timestamp:   time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+        ContainerID: "container123",
+        Image:       "myapp:latest",
+        OldDigest:   "sha256:old",
+        NewDigest:   "sha256:new",
     }
 
     // Notify
@@ -177,10 +185,13 @@ func TestSlackNotifier(t *testing.T) {
     assert.Equal(t, "https://hooks.slack.com/services/test", req.url)
     assert.Equal(t, "application/json", req.headers["Content-Type"])
 
-    // Verify the payload
+    // Verify the payload uses template rendering
     var payload map[string]string
     json.Unmarshal([]byte(req.body), &payload)
-    assert.Equal(t, "Test Subject\nTest Body", payload["text"])
+    assert.Contains(t, payload["text"], "container123")
+    assert.Contains(t, payload["text"], "myapp:latest")
+    assert.Contains(t, payload["text"], "sha256:old")
+    assert.Contains(t, payload["text"], "sha256:new")
 }
 
 // TestDiscordNotifier tests the DiscordNotifier implementation
@@ -197,10 +208,14 @@ func TestDiscordNotifier(t *testing.T) {
 
     // Create a test notification
     n := Notification{
-        Subject:    "Test Subject",
-        Body:       "Test Body",
-        Level:      "info",
-        Timestamp:  time.Now(),
+        Subject:     "Test Subject",
+        Body:        "Test Body",
+        Level:       "info",
+        Timestamp:   time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+        ContainerID: "container123",
+        Image:       "myapp:latest",
+        OldDigest:   "sha256:old",
+        NewDigest:   "sha256:new",
     }
 
     // Notify
@@ -214,10 +229,13 @@ func TestDiscordNotifier(t *testing.T) {
     assert.Equal(t, "https://discord.com/api/webhooks/test", req.url)
     assert.Equal(t, "application/json", req.headers["Content-Type"])
 
-    // Verify the payload
+    // Verify the payload uses template rendering
     var payload map[string]string
     json.Unmarshal([]byte(req.body), &payload)
-    assert.Equal(t, "Test Subject\nTest Body", payload["content"])
+    assert.Contains(t, payload["content"], "container123")
+    assert.Contains(t, payload["content"], "myapp:latest")
+    assert.Contains(t, payload["content"], "sha256:old")
+    assert.Contains(t, payload["content"], "sha256:new")
 }
 
 // TestEmailNotifier tests the EmailNotifier implementation
@@ -263,10 +281,14 @@ func TestTelegramNotifier(t *testing.T) {
 
     // Create a test notification
     n := Notification{
-        Subject:    "Test Subject",
-        Body:       "Test Body",
-        Level:      "info",
-        Timestamp:  time.Now(),
+        Subject:     "Test Subject",
+        Body:        "Test Body",
+        Level:       "info",
+        Timestamp:   time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+        ContainerID: "container123",
+        Image:       "myapp:latest",
+        OldDigest:   "sha256:old",
+        NewDigest:   "sha256:new",
     }
 
     // Notify
@@ -280,11 +302,12 @@ func TestTelegramNotifier(t *testing.T) {
     assert.Equal(t, "https://api.telegram.org/bot123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11/sendMessage", req.url)
     assert.Equal(t, "application/json", req.headers["Content-Type"])
 
-    // Verify the payload
+    // Verify the payload uses template rendering
     var payload map[string]string
     json.Unmarshal([]byte(req.body), &payload)
     assert.Equal(t, "123456789", payload["chat_id"])
-    assert.Equal(t, "Test Subject\nTest Body", payload["text"])
+    assert.Contains(t, payload["text"], "container123")
+    assert.Contains(t, payload["text"], "myapp:latest")
     assert.Equal(t, "Markdown", payload["parse_mode"])
 }
 
@@ -302,10 +325,14 @@ func TestMSTeamsNotifier(t *testing.T) {
 
     // Create a test notification
     n := Notification{
-        Subject:    "Test Subject",
-        Body:       "Test Body",
-        Level:      "info",
-        Timestamp:  time.Now(),
+        Subject:     "Test Subject",
+        Body:        "Test Body",
+        Level:       "info",
+        Timestamp:   time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+        ContainerID: "container123",
+        Image:       "myapp:latest",
+        OldDigest:   "sha256:old",
+        NewDigest:   "sha256:new",
     }
 
     // Notify
@@ -319,12 +346,14 @@ func TestMSTeamsNotifier(t *testing.T) {
     assert.Equal(t, "https://outlook.office.com/webhook/test", req.url)
     assert.Equal(t, "application/json", req.headers["Content-Type"])
 
-    // Verify the payload
+    // Verify the payload uses template rendering
     var payload map[string]interface{}
     json.Unmarshal([]byte(req.body), &payload)
     assert.Equal(t, "MessageCard", payload["@type"])
     assert.Equal(t, "http://schema.org/extensions", payload["@context"])
-    assert.Equal(t, "Test Subject\nTest Body", payload["text"])
+    text := payload["text"].(string)
+    assert.Contains(t, text, "container123")
+    assert.Contains(t, text, "myapp:latest")
 }
 
 // TestGoogleChatNotifier tests the GoogleChatNotifier implementation
@@ -341,10 +370,14 @@ func TestGoogleChatNotifier(t *testing.T) {
 
     // Create a test notification
     n := Notification{
-        Subject:    "Test Subject",
-        Body:       "Test Body",
-        Level:      "info",
-        Timestamp:  time.Now(),
+        Subject:     "Test Subject",
+        Body:        "Test Body",
+        Level:       "info",
+        Timestamp:   time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+        ContainerID: "container123",
+        Image:       "myapp:latest",
+        OldDigest:   "sha256:old",
+        NewDigest:   "sha256:new",
     }
 
     // Notify
@@ -358,10 +391,11 @@ func TestGoogleChatNotifier(t *testing.T) {
     assert.Equal(t, "https://chat.googleapis.com/v1/spaces/test/messages", req.url)
     assert.Equal(t, "application/json", req.headers["Content-Type"])
 
-    // Verify the payload
+    // Verify the payload uses template rendering
     var payload map[string]string
     json.Unmarshal([]byte(req.body), &payload)
-    assert.Equal(t, "Test Subject\nTest Body", payload["text"])
+    assert.Contains(t, payload["text"], "container123")
+    assert.Contains(t, payload["text"], "myapp:latest")
 }
 
 // mockHTTPClient is a mock HTTP client for testing

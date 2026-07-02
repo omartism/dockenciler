@@ -2,6 +2,9 @@
 
 Lightweight Docker reconciler that automatically updates containers based on image matching criteria.
 
+## IMPORTANT
+Always update Documentation in README.md if needed
+
 ## Developer Commands
 Use the `Makefile` for most tasks:
 - **Build**: `make build` (outputs binary to root)
