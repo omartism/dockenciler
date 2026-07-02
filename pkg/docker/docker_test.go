@@ -176,11 +176,10 @@ func TestUpdateService(t *testing.T) {
 		wantErr       bool
 		expectedError string
 	}{
-{
-			name:   "success",
+		{
+			name:      "success",
 			serviceID: "service1",
 			spec: ServiceSpec{
-				Name: "test-service",
 				TaskTemplate: struct {
 					ContainerSpec struct {
 						Image string
@@ -194,14 +193,33 @@ func TestUpdateService(t *testing.T) {
 				},
 			},
 			setupMock: func(m *mockDockerClient) {
+				m.ServiceInspectWithRawFunc = func(ctx context.Context, serviceID string, options types.ServiceInspectOptions) (swarm.Service, []byte, error) {
+					return swarm.Service{
+						Meta: swarm.Meta{
+							Version: swarm.Version{Index: 42},
+						},
+						Spec: swarm.ServiceSpec{
+							Annotations: swarm.Annotations{
+								Name: "prod_myna-dashboard",
+								Labels: map[string]string{
+									"com.docker.stack.namespace": "prod",
+								},
+							},
+						},
+					}, nil, nil
+				}
 				m.ServiceUpdateFunc = func(ctx context.Context, serviceID string, version swarm.Version, spec swarm.ServiceSpec, options types.ServiceUpdateOptions) (swarm.ServiceUpdateResponse, error) {
-					// Verify the service ID
 					if serviceID != "service1" {
 						t.Errorf("expected serviceID service1, got %s", serviceID)
 					}
-					// Verify the spec contains the expected image
 					if spec.TaskTemplate.ContainerSpec.Image != "new-image" {
 						t.Errorf("expected image new-image, got %s", spec.TaskTemplate.ContainerSpec.Image)
+					}
+					if spec.Annotations.Name != "prod_myna-dashboard" {
+						t.Errorf("expected annotations name prod_myna-dashboard, got %s", spec.Annotations.Name)
+					}
+					if spec.Annotations.Labels["com.docker.stack.namespace"] != "prod" {
+						t.Errorf("expected label com.docker.stack.namespace=prod, got %v", spec.Annotations.Labels)
 					}
 					return swarm.ServiceUpdateResponse{}, nil
 				}
@@ -210,10 +228,9 @@ func TestUpdateService(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name:   "error from service update",
+			name:      "error from service update",
 			serviceID: "service1",
 			spec: ServiceSpec{
-				Name: "test-service",
 				TaskTemplate: struct {
 					ContainerSpec struct {
 						Image string
@@ -227,6 +244,16 @@ func TestUpdateService(t *testing.T) {
 				},
 			},
 			setupMock: func(m *mockDockerClient) {
+				m.ServiceInspectWithRawFunc = func(ctx context.Context, serviceID string, options types.ServiceInspectOptions) (swarm.Service, []byte, error) {
+					return swarm.Service{
+						Meta: swarm.Meta{
+							Version: swarm.Version{Index: 1},
+						},
+						Spec: swarm.ServiceSpec{
+							Annotations: swarm.Annotations{Name: "test-service"},
+						},
+					}, nil, nil
+				}
 				m.ServiceUpdateFunc = func(ctx context.Context, serviceID string, version swarm.Version, spec swarm.ServiceSpec, options types.ServiceUpdateOptions) (swarm.ServiceUpdateResponse, error) {
 					return swarm.ServiceUpdateResponse{}, errors.New("update failed")
 				}
@@ -234,7 +261,7 @@ func TestUpdateService(t *testing.T) {
 			wantErr:       true,
 			expectedError: "update failed",
 		},
-		}
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -255,14 +255,16 @@ func (d *DockerClientImpl) RecreateContainer(ctx context.Context, id string, spe
 }
 
 func (d *DockerClientImpl) UpdateService(ctx context.Context, serviceID string, spec ServiceSpec) error {
-	// First, inspect the service to get its current version
+	// First, inspect the service to get its current version and annotations
 	service, _, err := d.client.ServiceInspectWithRaw(ctx, serviceID, types.ServiceInspectOptions{})
 	if err != nil {
 		return err
 	}
 
-	// Convert our ServiceSpec to swarm.ServiceSpec
+	// Convert our ServiceSpec to swarm.ServiceSpec, preserving existing annotations
+	// to avoid "renaming services is not supported" error from Docker daemon
 	swarmSpec := toSwarmServiceSpec(spec)
+	swarmSpec.Annotations = service.Spec.Annotations
 
 	// Perform a rolling update by updating the service
 	_, err = d.client.ServiceUpdate(ctx, serviceID, service.Version, swarmSpec, types.ServiceUpdateOptions{})
