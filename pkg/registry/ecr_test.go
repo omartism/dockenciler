@@ -271,8 +271,8 @@ func TestGetLatestDigest(t *testing.T) {
     }
 }
 
-// TestGetAuthToken tests the ECRProvider.GetAuthToken method with caching
-func TestGetAuthToken(t *testing.T) {
+// TestGetAuth tests the ECRProvider.GetAuth method with caching
+func TestGetAuth(t *testing.T) {
     t.Run("returns cached token when valid", func(t *testing.T) {
         mockClient := &mockECRClient{
             getAuthorizationTokenOutput: &ecr.GetAuthorizationTokenOutput{
@@ -293,13 +293,14 @@ func TestGetAuthToken(t *testing.T) {
         provider.tokenExpiry = time.Now().Add(1 * time.Hour)
         provider.mu.Unlock()
 
-        // Call GetAuthToken
-        registryURL, token, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        auth, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.NoError(t, err)
-        assert.Equal(t, "https://example.com", registryURL)
-        assert.Equal(t, "password", token)
+        assert.Equal(t, "AWS", auth.Username)
+        assert.Equal(t, "password", auth.Password)
+        assert.Equal(t, "https://example.com", auth.RegistryHost)
         // Ensure the mock was not called
         assert.Equal(t, 0, mockClient.getAuthorizationTokenCallCount)
     })
@@ -324,13 +325,14 @@ func TestGetAuthToken(t *testing.T) {
         provider.tokenExpiry = time.Now().Add(4 * time.Minute) // Expires in 4 minutes (<5 min)
         provider.mu.Unlock()
 
-        // Call GetAuthToken
-        registryURL, token, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        auth, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.NoError(t, err)
-        assert.Equal(t, "https://new-example.com", registryURL)
-        assert.Equal(t, "password", token) // decoded from base64 "dG9rZW46cGFzc3dvcmQ="
+        assert.Equal(t, "AWS", auth.Username)
+        assert.Equal(t, "password", auth.Password)
+        assert.Equal(t, "https://new-example.com", auth.RegistryHost)
         // Ensure the mock was called once
         assert.Equal(t, 1, mockClient.getAuthorizationTokenCallCount)
         // Ensure the cache was updated
@@ -348,8 +350,8 @@ func TestGetAuthToken(t *testing.T) {
         }
         provider := NewECRProvider(mockClient)
 
-        // Call GetAuthToken
-        _, _, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        _, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.Error(t, err)
@@ -371,8 +373,8 @@ func TestGetAuthToken(t *testing.T) {
         }
         provider := NewECRProvider(mockClient)
 
-        // Call GetAuthToken
-        _, _, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        _, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.Error(t, err)
@@ -393,8 +395,8 @@ func TestGetAuthToken(t *testing.T) {
         }
         provider := NewECRProvider(mockClient)
 
-        // Call GetAuthToken
-        _, _, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        _, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.Error(t, err)
@@ -415,8 +417,8 @@ func TestGetAuthToken(t *testing.T) {
         }
         provider := NewECRProvider(mockClient)
 
-        // Call GetAuthToken
-        _, _, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        _, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.Error(t, err)
@@ -440,13 +442,14 @@ func TestGetAuthToken(t *testing.T) {
         }
         provider := NewECRProvider(mockClient)
 
-        // Call GetAuthToken
-        registryURL, token, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        auth, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.NoError(t, err)
-        assert.Equal(t, "https://example.com", registryURL)
-        assert.Equal(t, "password", token)
+        assert.Equal(t, "AWS", auth.Username)
+        assert.Equal(t, "password", auth.Password)
+        assert.Equal(t, "https://example.com", auth.RegistryHost)
         
         // Verify that the expiry is set to the ExpiresAt value
         provider.mu.RLock()
@@ -469,13 +472,14 @@ func TestGetAuthToken(t *testing.T) {
         }
         provider := NewECRProvider(mockClient)
 
-        // Call GetAuthToken
-        registryURL, token, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        auth, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.NoError(t, err)
-        assert.Equal(t, "https://example.com", registryURL)
-        assert.Equal(t, "password", token)
+        assert.Equal(t, "AWS", auth.Username)
+        assert.Equal(t, "password", auth.Password)
+        assert.Equal(t, "https://example.com", auth.RegistryHost)
         
         // Verify that the expiry is set to 12 hours from now
         provider.mu.RLock()
@@ -500,13 +504,14 @@ func TestGetAuthToken(t *testing.T) {
         }
         provider := NewECRProvider(mockClient)
 
-        // Call GetAuthToken
-        registryURL, token, err := provider.GetAuthToken(context.Background())
+        // Call GetAuth
+        auth, err := provider.GetAuth(context.Background())
 
         // Assertions
         assert.NoError(t, err)
-        assert.Equal(t, "https://example.com", registryURL)
-        assert.Equal(t, "password", token)
+        assert.Equal(t, "AWS", auth.Username)
+        assert.Equal(t, "password", auth.Password)
+        assert.Equal(t, "https://example.com", auth.RegistryHost)
         
         // Verify that the expiry is set to 12 hours from now
         provider.mu.RLock()
@@ -516,9 +521,9 @@ func TestGetAuthToken(t *testing.T) {
     })
 }
 
-// TestGetAuthTokenConcurrent tests that multiple concurrent calls to GetAuthToken
+// TestGetAuthConcurrent tests that multiple concurrent calls to GetAuth
 // only result in a single call to the underlying AWS service.
-func TestGetAuthTokenConcurrent(t *testing.T) {
+func TestGetAuthConcurrent(t *testing.T) {
     // Set up a mock that returns a token after a short delay to simulate network latency
     callCount := 0
     var mu sync.Mutex
@@ -540,13 +545,13 @@ func TestGetAuthTokenConcurrent(t *testing.T) {
     }
     provider := NewECRProvider(mockClient)
 
-    // Call GetAuthToken concurrently multiple times
+    // Call GetAuth concurrently multiple times
     var wg sync.WaitGroup
     for i := 0; i < 10; i++ {
         wg.Add(1)
         go func() {
             defer wg.Done()
-            provider.GetAuthToken(context.Background())
+            provider.GetAuth(context.Background())
         }()
     }
     wg.Wait()
@@ -558,7 +563,7 @@ func TestGetAuthTokenConcurrent(t *testing.T) {
 }
 
 // mockECRClient is a mock implementation of the ECRClient interface for testing
-// This is a simplified mock that only implements what's needed for GetLatestDigest and GetAuthToken tests
+// This is a simplified mock that only implements what's needed for GetLatestDigest and GetAuth tests
 // In a real implementation, you would use testify/mock or similar
 // For this test, we'll use a struct with function fields
 

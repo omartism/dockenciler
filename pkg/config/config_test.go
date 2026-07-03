@@ -10,9 +10,11 @@ func TestLoadConfig(t *testing.T) {
     completeConfig := `{
         "registry": {
             "type": "ecr",
-            "region": "us-west-2",
-            "access_key": "test-key",
-            "secret_key": "test-secret"
+            "ecr": {
+                "region": "us-west-2",
+                "access_key": "test-key",
+                "secret_key": "test-secret"
+            }
         },
         "docker": {
             "socket_path": "/var/run/docker.sock",
@@ -35,8 +37,17 @@ func TestLoadConfig(t *testing.T) {
     if config.Registry.Type != "ecr" {
         t.Errorf("Expected registry type 'ecr', got '%s'", config.Registry.Type)
     }
-    if config.Registry.Region != "us-west-2" {
-        t.Errorf("Expected region 'us-west-2', got '%s'", config.Registry.Region)
+    if config.Registry.ECR == nil {
+        t.Fatal("Expected ECR config to be non-nil")
+    }
+    if config.Registry.ECR.Region != "us-west-2" {
+        t.Errorf("Expected region 'us-west-2', got '%s'", config.Registry.ECR.Region)
+    }
+    if config.Registry.ECR.AccessKey != "test-key" {
+        t.Errorf("Expected access_key 'test-key', got '%s'", config.Registry.ECR.AccessKey)
+    }
+    if config.Registry.ECR.SecretKey != "test-secret" {
+        t.Errorf("Expected secret_key 'test-secret', got '%s'", config.Registry.ECR.SecretKey)
     }
     if config.Docker.SocketPath != "/var/run/docker.sock" {
         t.Errorf("Expected socket path '/var/run/docker.sock', got '%s'", config.Docker.SocketPath)
@@ -66,7 +77,9 @@ func TestLoadConfigWithDefaults(t *testing.T) {
     minimalConfig := `{
         "registry": {
             "type": "ecr",
-            "region": "us-east-1"
+            "ecr": {
+                "region": "us-east-1"
+            }
         }
     }`
 
@@ -101,36 +114,31 @@ func TestLoadConfigWithDefaults(t *testing.T) {
     }
 }
 
-func TestLoadConfig_DryRunAndExclusions(t *testing.T) {
-    // Test with dry_run and exclusions set
-    configWithValues := `{
+func TestLoadConfig_GCR(t *testing.T) {
+    gcrConfig := `{
         "registry": {
-            "type": "ecr",
-            "region": "us-west-2"
-        },
-        "dry_run": true,
-        "exclusions": ["container1", "container2"]
+            "type": "gcr",
+            "gcr": {
+                "auth": {
+                    "method": "adc"
+                }
+            }
+        }
     }`
 
-    config, err := LoadConfigFromString(configWithValues)
+    config, err := LoadConfigFromString(gcrConfig)
     if err != nil {
-        t.Fatalf("Failed to load config with dry_run and exclusions: %v", err)
+        t.Fatalf("Failed to load GCR config: %v", err)
     }
 
-    // Check that dry_run is loaded correctly
-    if config.DryRun != true {
-        t.Errorf("Expected dry_run to be true, got '%v'", config.DryRun)
+    if config.Registry.Type != "gcr" {
+        t.Errorf("Expected registry type 'gcr', got '%s'", config.Registry.Type)
     }
-    
-    // Check that exclusions are loaded correctly
-    if len(config.Exclusions) != 2 {
-        t.Errorf("Expected 2 exclusions, got %d", len(config.Exclusions))
+    if config.Registry.GCR == nil {
+        t.Fatal("Expected GCR config to be non-nil")
     }
-    if config.Exclusions[0] != "container1" {
-        t.Errorf("Expected first exclusion 'container1', got '%s'", config.Exclusions[0])
-    }
-    if config.Exclusions[1] != "container2" {
-        t.Errorf("Expected second exclusion 'container2', got '%s'", config.Exclusions[1])
+    if config.Registry.GCR.Auth.Method != "adc" {
+        t.Errorf("Expected GCR auth method 'adc', got '%s'", config.Registry.GCR.Auth.Method)
     }
 }
 

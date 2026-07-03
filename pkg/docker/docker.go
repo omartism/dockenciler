@@ -69,7 +69,7 @@ type DockerClient interface {
 	RecreateContainer(ctx context.Context, id string, spec ContainerSpec, newImage string) error
 	UpdateService(ctx context.Context, serviceID string, spec ServiceSpec) error
 	IsSwarmMode(ctx context.Context) (bool, error)
-	Authenticate(ctx context.Context, registry, token string) error
+	Authenticate(ctx context.Context, username, password, registryHost string) error
 	GetImageDigest(ctx context.Context, imageRef string) (string, error)
 	GetServiceID(ctx context.Context, containerID string) (string, error)
 }
@@ -279,16 +279,14 @@ func (d *DockerClientImpl) IsSwarmMode(ctx context.Context) (bool, error) {
 	return info.Swarm.LocalNodeState == swarm.LocalNodeStateActive, nil
 }
 
-func (d *DockerClientImpl) Authenticate(ctx context.Context, registryURL, token string) error {
-	// Strip https:// prefix from registry URL if present (Docker SDK expects bare hostname)
-	serverAddress := strings.TrimPrefix(registryURL, "https://")
+func (d *DockerClientImpl) Authenticate(ctx context.Context, username, password, registryHost string) error {
+	// Strip https:// prefix from registry host if present (Docker SDK expects bare hostname)
+	serverAddress := strings.TrimPrefix(registryHost, "https://")
 	serverAddress = strings.TrimPrefix(serverAddress, "http://")
 
-	// ECR auth uses "AWS" as username and the authorization token as password
-	// ServerAddress must be set so Docker daemon knows which registry to authenticate with
 	authConfig := registry.AuthConfig{
-		Username:      "AWS",
-		Password:      token,
+		Username:      username,
+		Password:      password,
 		ServerAddress: serverAddress,
 	}
 

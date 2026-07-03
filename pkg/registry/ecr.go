@@ -82,16 +82,16 @@ func NewECRProvider(client ECRClient) *ECRProvider {
     }
 }
 
-// GetAuthToken retrieves a valid authorization token from ECR, using caching with a 5-minute buffer.
-// GetAuthToken retrieves a valid authorization token from ECR, using caching with a 5-minute buffer.
-func (p *ECRProvider) GetAuthToken(ctx context.Context) (string, string, error) {
+// GetAuth returns Docker auth credentials for ECR. Username is "AWS", password is the
+// decoded ECR token. Uses caching with a 5-minute buffer.
+func (p *ECRProvider) GetAuth(ctx context.Context) (Auth, error) {
     p.mu.RLock()
     if p.tokenExpiry.After(time.Now().Add(5*time.Minute)) && p.cachedToken != "" && p.cachedRegistryURL != "" {
         // Token is still valid, return cached token and registry URL
         token := p.cachedToken
         registryURL := p.cachedRegistryURL
         p.mu.RUnlock()
-        return registryURL, token, nil
+        return Auth{Username: "AWS", Password: token, RegistryHost: registryURL}, nil
     }
     p.mu.RUnlock()
 
@@ -101,32 +101,32 @@ func (p *ECRProvider) GetAuthToken(ctx context.Context) (string, string, error) 
 
     // Double-check after acquiring lock
     if p.tokenExpiry.After(time.Now().Add(5*time.Minute)) && p.cachedToken != "" && p.cachedRegistryURL != "" {
-        return p.cachedRegistryURL, p.cachedToken, nil
+        return Auth{Username: "AWS", Password: p.cachedToken, RegistryHost: p.cachedRegistryURL}, nil
     }
 
     // Call GetAuthorizationToken
     output, err := p.authClient.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{})
     if err != nil {
-        return "", "", fmt.Errorf("failed to get authorization token: %w", err)
+        return Auth{}, fmt.Errorf("failed to get authorization token: %w", err)
     }
 
     if len(output.AuthorizationData) == 0 {
-        return "", "", fmt.Errorf("no authorization data returned")
+        return Auth{}, fmt.Errorf("no authorization data returned")
     }
 
     data := output.AuthorizationData[0]
     if data.AuthorizationToken == nil {
-        return "", "", fmt.Errorf("authorization token is nil")
+        return Auth{}, fmt.Errorf("authorization token is nil")
     }
     if data.ProxyEndpoint == nil {
-        return "", "", fmt.Errorf("proxy endpoint is nil")
+        return Auth{}, fmt.Errorf("proxy endpoint is nil")
     }
 
     // Decode the base64 token. ECR returns "AWS:<password>" base64-encoded.
     // Docker expects the decoded password as the password field.
     decoded, err := base64.StdEncoding.DecodeString(*data.AuthorizationToken)
     if err != nil {
-        return "", "", fmt.Errorf("failed to decode authorization token: %w", err)
+        return Auth{}, fmt.Errorf("failed to decode authorization token: %w", err)
     }
     // Extract the password part after "AWS:"
     tokenStr := string(decoded)
@@ -144,13 +144,13 @@ func (p *ECRProvider) GetAuthToken(ctx context.Context) (string, string, error) 
         p.tokenExpiry = time.Now().Add(12 * time.Hour)
     }
 
-    return p.cachedRegistryURL, p.cachedToken, nil
+    return Auth{Username: "AWS", Password: p.cachedToken, RegistryHost: p.cachedRegistryURL}, nil
 }
 
 // GetLatestDigest retrieves the latest image digest from ECR based on criteria
 func (p *ECRProvider) GetLatestDigest(ctx context.Context, imageRef string, criteria Criteria) (string, error) {
     // Parse image reference to extract repository and tag
-    repo, tag, err := parseImageRef(imageRef)
+    repo, tag, err := ecrParseRef(imageRef)
     if err != nil {
         return "", fmt.Errorf("failed to parse image reference: %w", err)
     }
@@ -231,7 +231,7 @@ func (p *ECRProvider) GetLatestDigest(ctx context.Context, imageRef string, crit
 // GetImageVersion retrieves the tag of the latest image from ECR
 func (p *ECRProvider) GetImageVersion(ctx context.Context, imageRef string) (string, error) {
     // Parse image reference to extract repository and tag
-    repo, _, err := parseImageRef(imageRef)
+    repo, _, err := ecrParseRef(imageRef)
     if err != nil {
         return "", fmt.Errorf("failed to parse image reference: %w", err)
     }
@@ -270,14 +270,14 @@ func (p *ECRProvider) GetImageVersion(ctx context.Context, imageRef string) (str
     return "", fmt.Errorf("latest image has no tag")
 }
 
-// parseImageRef parses an image reference in formats:
+// ecrParseRef parses an image reference in formats:
 //   - "repository:tag"
 //   - "repository@sha256:digest"
 //   - "registry/repo:tag"
 //   - "registry/repo@sha256:digest"
 //
 // For ECR, it extracts just the repository name without the registry prefix.
-func parseImageRef(imageRef string) (repo string, tag string, err error) {
+func ecrParseRef(imageRef string) (repo string, tag string, err error) {
     if len(imageRef) == 0 {
         return "", "", fmt.Errorf("empty image reference")
     }

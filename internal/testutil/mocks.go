@@ -13,7 +13,7 @@ import (
 type MockRegistry struct {
     GetLatestDigestFunc func(ctx context.Context, imageRef string, criteria registry.Criteria) (string, error)
     GetImageVersionFunc func(ctx context.Context, imageRef string) (string, error)
-    GetAuthTokenFunc    func(ctx context.Context) (string, string, error) // returns registryURL and token
+    GetAuthFunc         func(ctx context.Context) (registry.Auth, error)
     InvalidateCacheFunc func()
 }
 
@@ -31,11 +31,11 @@ func (m *MockRegistry) GetImageVersion(ctx context.Context, imageRef string) (st
     return "", nil
 }
 
-func (m *MockRegistry) GetAuthToken(ctx context.Context) (string, string, error) {
-    if m.GetAuthTokenFunc != nil {
-        return m.GetAuthTokenFunc(ctx)
+func (m *MockRegistry) GetAuth(ctx context.Context) (registry.Auth, error) {
+    if m.GetAuthFunc != nil {
+        return m.GetAuthFunc(ctx)
     }
-    return "", "", nil
+    return registry.Auth{}, nil
 }
 
 func (m *MockRegistry) InvalidateCache() {
@@ -53,7 +53,7 @@ type MockDockerClient struct {
     RecreateContainerFunc func(ctx context.Context, id string, spec docker.ContainerSpec, newImage string) error
     UpdateServiceFunc    func(ctx context.Context, serviceID string, spec docker.ServiceSpec) error
     GetImageDigestFunc   func(ctx context.Context, imageRef string) (string, error)
-    AuthenticateFunc     func(ctx context.Context, registryURL string, token string) error
+    AuthenticateFunc     func(ctx context.Context, username, password, registryHost string) error
     IsSwarmModeFunc      func(ctx context.Context) (bool, error)
     GetServiceIDFunc     func(ctx context.Context, containerID string) (string, error)
 }
@@ -100,9 +100,9 @@ func (m *MockDockerClient) GetImageDigest(ctx context.Context, imageRef string) 
     return "", nil
 }
 
-func (m *MockDockerClient) Authenticate(ctx context.Context, registryURL string, token string) error {
+func (m *MockDockerClient) Authenticate(ctx context.Context, username, password, registryHost string) error {
     if m.AuthenticateFunc != nil {
-        return m.AuthenticateFunc(ctx, registryURL, token)
+        return m.AuthenticateFunc(ctx, username, password, registryHost)
     }
     return nil
 }

@@ -27,12 +27,12 @@ type Reconciler struct {
 		GetImageDigest(ctx context.Context, imageRef string) (string, error)
 		IsSwarmMode(ctx context.Context) (bool, error)
 		GetServiceID(ctx context.Context, containerID string) (string, error)
-		Authenticate(ctx context.Context, registryURL string, token string) error
+		Authenticate(ctx context.Context, username, password, registryHost string) error
 	}
 	Registry interface {
 		GetLatestDigest(ctx context.Context, imageRef string, criteria registry.Criteria) (string, error)
 		GetImageVersion(ctx context.Context, imageRef string) (string, error)
-		GetAuthToken(ctx context.Context) (string, string, error) // returns registryURL and token
+		GetAuth(ctx context.Context) (registry.Auth, error)
 		InvalidateCache()
 	}
 	Notifier interface {
@@ -138,16 +138,16 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			continue
 		}
 
-		// Get auth token from registry
-		registryURL, token, err := r.Registry.GetAuthToken(ctx)
+		// Get auth credentials from registry
+		auth, err := r.Registry.GetAuth(ctx)
 		if err != nil {
-			slog.Error("Failed to get auth token from registry", "container_id", container.ID, "image", container.Image, "error", err)
+			slog.Error("Failed to get auth from registry", "container_id", container.ID, "image", container.Image, "error", err)
 			failed++
 			continue // Continue to next container
 		}
 
 		// Authenticate with Docker daemon
-		if err := r.DockerClient.Authenticate(ctx, registryURL, token); err != nil {
+		if err := r.DockerClient.Authenticate(ctx, auth.Username, auth.Password, auth.RegistryHost); err != nil {
 			slog.Error("Failed to authenticate with Docker daemon", "container_id", container.ID, "image", container.Image, "error", err)
 			failed++
 			continue // Continue to next container
@@ -168,16 +168,16 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 				// Invalidate cache
 				r.Registry.InvalidateCache()
 				
-				// Re-fetch token
-				registryURL, token, err2 := r.Registry.GetAuthToken(ctx)
+				// Re-fetch auth
+				auth2, err2 := r.Registry.GetAuth(ctx)
 				if err2 != nil {
-					slog.Error("Failed to re-fetch auth token", "container_id", container.ID, "image", container.Image, "error", err2)
+					slog.Error("Failed to re-fetch auth from registry", "container_id", container.ID, "image", container.Image, "error", err2)
 					failed++
 					continue // Continue to next container
 				}
 				
 				// Re-authenticate
-				if err := r.DockerClient.Authenticate(ctx, registryURL, token); err != nil {
+				if err := r.DockerClient.Authenticate(ctx, auth2.Username, auth2.Password, auth2.RegistryHost); err != nil {
 					slog.Error("Failed to re-authenticate with Docker daemon", "container_id", container.ID, "image", container.Image, "error", err)
 					failed++
 					continue // Continue to next container

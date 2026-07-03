@@ -44,15 +44,15 @@ func TestReconcile_WhenNewDigestAvailable_RecreatesContainer(t *testing.T) {
         return "sha256:newdigest123", nil
     }
 
-	mockRegistry.GetAuthTokenFunc = func(ctx context.Context) (string, string, error) {
+    mockRegistry.GetAuthFunc = func(ctx context.Context) (registry.Auth, error) {
 		getTokenCalled = true
-		return "https://index.docker.io/v1/", "faketoken", nil
+		return registry.Auth{Username: "AWS", Password: "faketoken", RegistryHost: "https://index.docker.io/v1/"}, nil
 	}
 
-	mockDocker.AuthenticateFunc = func(ctx context.Context, registryURL string, token string) error {
+	mockDocker.AuthenticateFunc = func(ctx context.Context, username, password, registryHost string) error {
         authCalled = true
         // Ensure token is not empty
-        if token == "" {
+        if password == "" {
             return fmt.Errorf("empty token")
         }
         return nil
@@ -96,9 +96,9 @@ func TestReconcile_WhenNewDigestAvailable_RecreatesContainer(t *testing.T) {
         t.Error("DockerClient.GetImageDigest was not called")
     }
 
-    // Assert that Registry.GetAuthToken was called
+    // Assert that Registry.GetAuth was called
     if !getTokenCalled {
-        t.Error("Registry.GetAuthToken was not called")
+        t.Error("Registry.GetAuth was not called")
     }
 
     // Assert that DockerClient.Authenticate was called
@@ -148,11 +148,11 @@ func TestReconcile_DryRunMode(t *testing.T) {
         return "sha256:newdigest123", nil
     }
 
-    mockRegistry.GetAuthTokenFunc = func(ctx context.Context) (string, string, error) {
-        return "https://index.docker.io/v1/", "faketoken", nil
+    mockRegistry.GetAuthFunc = func(ctx context.Context) (registry.Auth, error) {
+        return registry.Auth{Username: "AWS", Password: "faketoken", RegistryHost: "https://index.docker.io/v1/"}, nil
     }
 
-    mockDocker.AuthenticateFunc = func(ctx context.Context, registryURL string, token string) error {
+    mockDocker.AuthenticateFunc = func(ctx context.Context, username, password, registryHost string) error {
         authenticateCalled = true
         return nil
     }
@@ -256,14 +256,12 @@ func TestReconcile_RetryOnAuthFailure(t *testing.T) {
         return "sha256:newdigest123", nil
     }
 
-    mockRegistry.GetAuthTokenFunc = func(ctx context.Context) (string, string, error) {
+    mockRegistry.GetAuthFunc = func(ctx context.Context) (registry.Auth, error) {
         getTokenCalled++
         if getTokenCalled == 1 {
-            // First call succeeds
-            return "https://index.docker.io/v1/", "faketoken", nil
+            return registry.Auth{Username: "AWS", Password: "faketoken", RegistryHost: "https://index.docker.io/v1/"}, nil
         } else {
-            // Second call succeeds
-            return "https://index.docker.io/v1/", "newtoken", nil
+            return registry.Auth{Username: "AWS", Password: "newtoken", RegistryHost: "https://index.docker.io/v1/"}, nil
         }
     }
 
@@ -272,10 +270,10 @@ func TestReconcile_RetryOnAuthFailure(t *testing.T) {
         invalidateCacheCalled++
     }
 
-    mockDocker.AuthenticateFunc = func(ctx context.Context, registryURL string, token string) error {
+    mockDocker.AuthenticateFunc = func(ctx context.Context, username, password, registryHost string) error {
         authenticateCalled++
         // Ensure token is not empty
-        if token == "" {
+        if password == "" {
             return fmt.Errorf("empty token")
         }
         return nil
@@ -319,9 +317,9 @@ func TestReconcile_RetryOnAuthFailure(t *testing.T) {
         t.Error("DockerClient.GetImageDigest was not called")
     }
 
-    // Assert that Registry.GetAuthToken was called twice (initial + retry)
+    // Assert that Registry.GetAuth was called twice (initial + retry)
     if getTokenCalled != 2 {
-        t.Errorf("Expected Registry.GetAuthToken to be called twice, but was called %d times", getTokenCalled)
+        t.Errorf("Expected Registry.GetAuth to be called twice, but was called %d times", getTokenCalled)
     }
 
     // Assert that DockerClient.Authenticate was called twice (initial + retry)
@@ -373,15 +371,15 @@ func TestReconcile_ImageRefHasDigestPinStripped(t *testing.T) {
         return "sha256:newdigest123", nil
     }
 
-	mockRegistry.GetAuthTokenFunc = func(ctx context.Context) (string, string, error) {
+	mockRegistry.GetAuthFunc = func(ctx context.Context) (registry.Auth, error) {
 		getTokenCalled = true
-		return "https://index.docker.io/v1/", "faketoken", nil
+		return registry.Auth{Username: "AWS", Password: "faketoken", RegistryHost: "https://index.docker.io/v1/"}, nil
 	}
 
-	mockDocker.AuthenticateFunc = func(ctx context.Context, registryURL string, token string) error {
+	mockDocker.AuthenticateFunc = func(ctx context.Context, username, password, registryHost string) error {
         authCalled = true
         // Ensure token is not empty
-        if token == "" {
+        if password == "" {
             return fmt.Errorf("empty token")
         }
         return nil
@@ -425,9 +423,9 @@ func TestReconcile_ImageRefHasDigestPinStripped(t *testing.T) {
         t.Error("DockerClient.GetImageDigest was not called")
     }
 
-    // Assert that Registry.GetAuthToken was called
+    // Assert that Registry.GetAuth was called
     if !getTokenCalled {
-        t.Error("Registry.GetAuthToken was not called")
+        t.Error("Registry.GetAuth was not called")
     }
 
     // Assert that DockerClient.Authenticate was called

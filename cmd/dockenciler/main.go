@@ -56,6 +56,13 @@ func main() {
 			os.Exit(1)
 		}
 		reg = ecrProvider
+	case "gcr":
+		gcrProvider, err := newGCRProvider(ctx, cfg)
+		if err != nil {
+			slog.Error("Failed to create GCR provider", "error", err)
+			os.Exit(1)
+		}
+		reg = gcrProvider
 	default:
 		slog.Error("Unsupported registry type", "type", cfg.Registry.Type)
 		os.Exit(1)
@@ -119,19 +126,23 @@ func printBanner() {
 }
 
 func newECRProvider(ctx context.Context, cfg *config.Config) (*registry.ECRProvider, error) {
+	if cfg.Registry.ECR == nil {
+		return nil, fmt.Errorf("ECR registry type requires ecr configuration")
+	}
+
 	awsCfg, err := awscfg.LoadDefaultConfig(ctx,
-		awscfg.WithRegion(cfg.Registry.Region),
+		awscfg.WithRegion(cfg.Registry.ECR.Region),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	if cfg.Registry.AccessKey != "" && cfg.Registry.SecretKey != "" {
+	if cfg.Registry.ECR.AccessKey != "" && cfg.Registry.ECR.SecretKey != "" {
 		awsCfg.Credentials = aws.NewCredentialsCache(
 			aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
 				return aws.Credentials{
-					AccessKeyID:     cfg.Registry.AccessKey,
-					SecretAccessKey: cfg.Registry.SecretKey,
+					AccessKeyID:     cfg.Registry.ECR.AccessKey,
+					SecretAccessKey: cfg.Registry.ECR.SecretKey,
 				}, nil
 			}),
 		)
@@ -139,6 +150,17 @@ func newECRProvider(ctx context.Context, cfg *config.Config) (*registry.ECRProvi
 
 	ecrClient := ecr.NewFromConfig(awsCfg)
 	return registry.NewECRProvider(ecrClient), nil
+}
+
+func newGCRProvider(ctx context.Context, cfg *config.Config) (*registry.GCRProvider, error) {
+	if cfg.Registry.GCR == nil {
+		return nil, fmt.Errorf("GCR registry type requires gcr configuration")
+	}
+	gcrCfg := registry.GCRConfig{
+		AuthMethod:         cfg.Registry.GCR.Auth.Method,
+		ServiceAccountFile: cfg.Registry.GCR.Auth.ServiceAccountFile,
+	}
+	return registry.NewGCRProvider(ctx, gcrCfg, &http.Client{Timeout: 30 * time.Second})
 }
 
 func newNotifier(cfg *config.Config) notifier.Notifier {

@@ -13,8 +13,8 @@ Dockenciler is a lightweight and efficient open-source Docker reconciler written
   - **Rolling Update**: Supports rolling updates for minimized downtime when running in Docker Swarm mode.
 - **Docker Swarm Support**: Fully compatible with Docker Swarm orchestration.
 - **Secure Authentication**:
-  - AWS ECR support via IAM Access Keys and Secret Keys.
-  - **Recommended**: IMDSv2 instance role for enhanced security on AWS.
+  - **AWS ECR**: IAM Access Keys / Secret Keys or IMDSv2 instance role (recommended for EC2).
+  - **GCR / Artifact Registry**: Application Default Credentials (ADC) or Service Account JSON Key.
 - **Extensive Notifications**: Get notified about update events via:
   - Email, Slack, MS Teams, Google Chat, Telegram, Discord, and local logs.
   - *Customizable notification templates for clear and concise alerts.*
@@ -65,7 +65,7 @@ services:
     environment:
       DOCKENCILER_REGISTRY_TYPE: "ecr"
       DOCKENCILER_DOCKER_LABEL_FILTER: "dockenciler.instance=true"
-      DOCKENCILER_REGISTRY_REGION: "eu-west-2"
+      DOCKENCILER_REGISTRY_ECR_REGION: "eu-west-2"
       DOCKENCILER_RECONCILE_INTERVAL: "1m"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -120,10 +120,12 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
 | `DOCKENCILER_RECONCILE_INTERVAL` | `reconcile_interval` | Interval between reconciliation loops | `1h` |
 | `DOCKENCILER_DOCKER_SOCKET_PATH` | `docker.socket_path` | Path to Docker socket | `/var/run/docker.sock` |
 | `DOCKENCILER_DOCKER_LABEL_FILTER` | `docker.label_filter` | Label to target containers | `dockenciler.autoupdate=true` |
-| `DOCKENCILER_REGISTRY_TYPE` | `registry.type` | Registry type (e.g., `ecr`) | - |
-| `DOCKENCILER_REGISTRY_REGION` | `registry.region` | AWS Region for ECR | - |
-| `DOCKENCILER_REGISTRY_ACCESS_KEY` | `registry.access_key` | AWS Access Key | - |
-| `DOCKENCILER_REGISTRY_SECRET_KEY` | `registry.secret_key` | AWS Secret Key | - |
+| `DOCKENCILER_REGISTRY_TYPE` | `registry.type` | Registry type (`ecr` or `gcr`) | - |
+| `DOCKENCILER_REGISTRY_ECR_REGION` | `registry.ecr.region` | AWS Region for ECR | - |
+| `DOCKENCILER_REGISTRY_ECR_ACCESS_KEY` | `registry.ecr.access_key` | AWS Access Key | - |
+| `DOCKENCILER_REGISTRY_ECR_SECRET_KEY` | `registry.ecr.secret_key` | AWS Secret Key | - |
+| `DOCKENCILER_REGISTRY_GCR_AUTH_METHOD` | `registry.gcr.auth.method` | GCR auth method (`adc` or `service_account`) | `adc` |
+| `DOCKENCILER_REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE` | `registry.gcr.auth.service_account_file` | Path to GCP service account JSON key file | - |
 | `DOCKENCILER_CRITERIA_VERSION` | `criteria.version` | Exact tag version to match | - |
 | `DOCKENCILER_CRITERIA_REGEX` | `criteria.regex` | Regex to match tags | - |
 | `DOCKENCILER_CRITERIA_DIGEST` | `criteria.digest` | Exact image digest to match | - |
@@ -155,9 +157,11 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
 {
   "registry": {
     "type": "ecr",
-    "region": "us-east-1",
-    "access_key": "AKIA...",
-    "secret_key": "..."
+    "ecr": {
+      "region": "us-east-1",
+      "access_key": "AKIA...",
+      "secret_key": "..."
+    }
   },
   "docker": {
     "socket_path": "/var/run/docker.sock",
@@ -180,6 +184,74 @@ All environment variables are prefixed with `DOCKENCILER_`. Nested configuration
   }
 }
 ```
+
+### GCR / Artifact Registry
+
+Dockenciler supports Google Container Registry (GCR) and Google Artifact Registry (AR) for image authentication and digest resolution. Two authentication methods are available.
+
+#### Authentication Methods
+
+##### 1. Application Default Credentials (ADC) — Recommended
+
+ADC automatically finds credentials from the environment: `GOOGLE_APPLICATION_CREDENTIALS` env var, GCP metadata server (Compute Engine, GKE), or gcloud CLI default credentials. No additional configuration file is required — just set the registry type.
+
+**JSON config:**
+```json
+{
+  "registry": {
+    "type": "gcr",
+    "gcr": {
+      "auth": {
+        "method": "adc"
+      }
+    }
+  }
+}
+```
+
+**Environment variables:**
+```bash
+export DOCKENCILER_REGISTRY_TYPE="gcr"
+export DOCKENCILER_REGISTRY_GCR_AUTH_METHOD="adc"
+```
+
+##### 2. Service Account JSON Key
+
+Use a downloaded GCP service account key file for environments where ADC is unavailable.
+
+**JSON config:**
+```json
+{
+  "registry": {
+    "type": "gcr",
+    "gcr": {
+      "auth": {
+        "method": "service_account",
+        "service_account_file": "/etc/dockenciler/gcp-key.json"
+      }
+    }
+  }
+}
+```
+
+**Environment variables:**
+```bash
+export DOCKENCILER_REGISTRY_TYPE="gcr"
+export DOCKENCILER_REGISTRY_GCR_AUTH_METHOD="service_account"
+export DOCKENCILER_REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE="/etc/dockenciler/gcp-key.json"
+```
+
+#### Supported Hostnames
+
+| Hostname | Type |
+|----------|------|
+| `gcr.io` | Google Container Registry |
+| `*.gcr.io` | Regional GCR (e.g., `us.gcr.io`, `eu.gcr.io`, `asia.gcr.io`) |
+| `us-docker.pkg.dev` | Artifact Registry (US multi-region) |
+| `europe-docker.pkg.dev` | Artifact Registry (Europe multi-region) |
+| `asia-docker.pkg.dev` | Artifact Registry (Asia multi-region) |
+
+Any Artifact Registry repository in the `docker` format under `*.pkg.dev` domains is also supported.
 
 ## 🔔 Notifications
 

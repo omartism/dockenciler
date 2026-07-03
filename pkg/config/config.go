@@ -11,11 +11,25 @@ import (
 	"github.com/spf13/viper"
 )
 
-type Registry struct {
-	Type      string `json:"type" mapstructure:"type"`
+type ECRConfig struct {
 	Region    string `json:"region" mapstructure:"region"`
 	AccessKey string `json:"access_key" mapstructure:"access_key"`
 	SecretKey string `json:"secret_key" mapstructure:"secret_key"`
+}
+
+type GCRAuth struct {
+	Method             string `json:"method" mapstructure:"method"`                       // "adc" | "service_account"
+	ServiceAccountFile string `json:"service_account_file" mapstructure:"service_account_file"`
+}
+
+type GCRConfig struct {
+	Auth GCRAuth `json:"auth" mapstructure:"auth"`
+}
+
+type Registry struct {
+	Type string      `json:"type" mapstructure:"type"` // "ecr" | "gcr"
+	ECR  *ECRConfig  `json:"ecr,omitempty" mapstructure:"ecr"`
+	GCR  *GCRConfig  `json:"gcr,omitempty" mapstructure:"gcr"`
 }
 
 type Docker struct {
@@ -82,9 +96,11 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Set defaults so AutomaticEnv knows which keys to look for
 	v.SetDefault("registry.type", "")
-	v.SetDefault("registry.region", "")
-	v.SetDefault("registry.access_key", "")
-	v.SetDefault("registry.secret_key", "")
+	v.SetDefault("registry.ecr.region", "")
+	v.SetDefault("registry.ecr.access_key", "")
+	v.SetDefault("registry.ecr.secret_key", "")
+	v.SetDefault("registry.gcr.auth.method", "adc")
+	v.SetDefault("registry.gcr.auth.service_account_file", "")
 	v.SetDefault("docker.socket_path", "/var/run/docker.sock")
 	v.SetDefault("docker.label_filter", "dockenciler.autoupdate=true")
 	v.SetDefault("reconcile_interval", "1h")
