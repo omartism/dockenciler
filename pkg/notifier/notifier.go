@@ -37,10 +37,16 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+// queuedNotification pairs a notification with its request-scoped context
+type queuedNotification struct {
+	n   Notification
+	ctx context.Context
+}
+
 // CompositeNotifier holds multiple notifiers and dispatches notifications to all of them
 type CompositeNotifier struct {
 	notifiers []Notifier
-	queue     chan Notification
+	queue     chan queuedNotification
 	ctx       context.Context
 	cancel    context.CancelFunc
 	done      chan struct{}
@@ -51,7 +57,7 @@ func NewCompositeNotifier(notifiers ...Notifier) *CompositeNotifier {
 	ctx, cancel := context.WithCancel(context.Background())
 	cn := &CompositeNotifier{
 		notifiers: notifiers,
-		queue:     make(chan Notification, 100),
+		queue:     make(chan queuedNotification, 100),
 		ctx:       ctx,
 		cancel:    cancel,
 		done:      make(chan struct{}),
@@ -63,7 +69,7 @@ func NewCompositeNotifier(notifiers ...Notifier) *CompositeNotifier {
 // Notify queues a notification for asynchronous dispatch to all registered notifiers
 func (cn *CompositeNotifier) Notify(ctx context.Context, n Notification) error {
 	select {
-	case cn.queue <- n:
+	case cn.queue <- queuedNotification{n: n, ctx: ctx}:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -79,15 +85,19 @@ func (cn *CompositeNotifier) worker() {
 		select {
 		case <-cn.ctx.Done():
 			return
-		case n, ok := <-cn.queue:
+		case qn, ok := <-cn.queue:
 			if !ok {
 				return
 			}
+			// Check the per-notification context before dispatching
+			if qn.ctx.Err() != nil {
+				continue
+			}
 			// Dispatch to all notifiers concurrently
 			for _, notifier := range cn.notifiers {
-				go func(n Notification, notifier Notifier) {
-					notifier.Notify(cn.ctx, n)
-				}(n, notifier)
+				go func(n Notification, notifier Notifier, ctx context.Context) {
+					notifier.Notify(ctx, n)
+				}(qn.n, notifier, qn.ctx)
 			}
 		}
 	}
