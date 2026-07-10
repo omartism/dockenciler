@@ -73,6 +73,28 @@ REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
 NOTIFICATIONS_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/xxxx
 ```
 
+### GCR / Artifact Registry
+
+Dockenciler supports AWS ECR and GCR / Artifact Registry. For GCR or Artifact Registry, replace the ECR config with:
+
+**`config.json`:**
+```json
+{
+  "registry": {
+    "type": "gcr",
+    "gcr": {
+      "auth": {
+        "method": "adc"
+      }
+    }
+  },
+  "reconcile_interval": "30m",
+  "log_level": "info"
+}
+```
+
+No ECR-related env vars are needed. The `adc` method (default) picks up `GOOGLE_APPLICATION_CREDENTIALS`, GCE/GKE metadata, or `gcloud auth application-default login`. For a service account JSON key, switch to `"method": "service_account"` and set `"service_account_file"` to the key path.
+
 Start the container:
 
 ```bash
