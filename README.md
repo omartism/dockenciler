@@ -7,7 +7,7 @@ Dockenciler is a lightweight and efficient open-source Docker reconciler written
 - **Flexible Image Matching**: Update containers based on the `latest` tag, specific version numbers, or custom regular expressions.
 - **Smart Filtering**: Update all containers by default, or target specific containers using the label `dockenciler.autoupdate=true` (customizable via `docker.label_filter`).
 - **Update Strategies**: In-place container recreation (default) or rolling updates in Docker Swarm mode for minimized downtime.
-- **Secure Authentication**: AWS ECR (IAM access keys or IMDSv2 instance role) and GCR / Artifact Registry (ADC or service account JSON key).
+- **Secure Authentication**: AWS ECR (IAM access keys or IMDSv2 instance role), GCR / Artifact Registry (ADC or service account JSON key), and Docker Hub (anonymous access for public images).
 - **Extensive Notifications**: Email, Slack, MS Teams, Google Chat, Telegram, Discord, and local logs — all with customizable Go `text/template` templates.
 - **Safety Rails**: Dry-run mode, self-update exclusion via `dockenciler.instance=true` label, and configurable exclusion lists.
 - **Multiple Configuration Sources**: JSON config file, environment variables (env vars override file), and sensible defaults.
@@ -47,7 +47,7 @@ Dockenciler automatically skips containers labeled `dockenciler.instance=true`, 
 
 ### Configuration
 
-Dockenciler supports two registry providers: AWS ECR and GCR / Artifact Registry. Pick one below.
+Dockenciler supports three registry providers: AWS ECR, GCR / Artifact Registry, and Docker Hub. Pick one below.
 
 #### ECR (Elastic Container Registry)
 
@@ -97,6 +97,29 @@ Leave `access_key` and `secret_key` empty to use IMDSv2 on EC2. The IAM role nee
 ```
 
 No ECR-related env vars are needed. The `adc` method (default) picks up `GOOGLE_APPLICATION_CREDENTIALS`, GCE/GKE metadata, or `gcloud auth application-default login`. For a service account JSON key, switch to `"method": "service_account"` and set `"service_account_file"` to the key path. See [GCR Provider](docs/providers/gcr.md) for auth methods, supported hostnames, and IAM setup.
+
+#### Docker Hub
+
+**`config.json`:**
+```json
+{
+  "registry": {
+    "type": "dockerhub"
+  },
+  "reconcile_interval": "30m",
+  "log_level": "info"
+}
+```
+
+No credentials are required for public images. Dockenciler obtains anonymous bearer tokens for registry API queries and the Docker daemon handles pulls without authentication. Add `dockenciler.autoupdate=true` as a label on any container running a public Docker Hub image to start automatic updates.
+
+Supported image reference formats:
+- `postgres:18-alpine` (official image, auto-prefixed with `library/`)
+- `library/postgres:18-alpine` (explicit library namespace)
+- `myuser/myimage:tag` (user/organization repository)
+- `docker.io/library/postgres:18-alpine` (fully-qualified)
+
+> **Note:** Private Docker Hub repositories are not yet supported. The provider only works with publicly accessible images.
 
 Start the container:
 
@@ -191,6 +214,7 @@ See [Notifications](docs/notifications.md) for provider setup guides, template c
 | Configuration | Full env var table, JSON schema, defaults | [docs/configuration.md](docs/configuration.md) |
 | ECR Provider | IAM keys, IMDSv2, region setup | [docs/providers/ecr.md](docs/providers/ecr.md) |
 | GCR / Artifact Registry | ADC, service account, supported hostnames | [docs/providers/gcr.md](docs/providers/gcr.md) |
+| Docker Hub Provider | Public image support, anonymous access | [docs/providers/dockerhub.md](docs/providers/dockerhub.md) |
 | Notifications | Provider setup, templates, field reference | [docs/notifications.md](docs/notifications.md) |
 | Security | Permissions, secrets, Docker socket hardening | [docs/security.md](docs/security.md) |
 | Operations & CI | Logs, dry-run, releases, CI pipeline | [docs/operations.md](docs/operations.md) |
