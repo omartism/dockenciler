@@ -47,8 +47,11 @@ Dockenciler automatically skips containers labeled `dockenciler.instance=true`, 
 
 ### Configuration
 
-Create `config.json` with your basic settings:
+Dockenciler supports two registry providers: AWS ECR and GCR / Artifact Registry. Pick one below.
 
+#### ECR (Elastic Container Registry)
+
+**`config.json`:**
 ```json
 {
   "registry": {
@@ -65,7 +68,7 @@ Create `config.json` with your basic settings:
 }
 ```
 
-Place environment-specific secrets in `.env` (copy from `.env.example`):
+Place secrets in `.env` (copy from `.env.example`):
 
 ```bash
 REGISTRY_ECR_ACCESS_KEY=YOUR_AWS_ACCESS_KEY_ID
@@ -73,9 +76,9 @@ REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
 NOTIFICATIONS_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/xxxx
 ```
 
-### GCR / Artifact Registry
+Leave `access_key` and `secret_key` empty to use IMDSv2 on EC2. The IAM role needs `ecr:GetAuthorizationToken`. See [ECR Provider](docs/providers/ecr.md) for region setup, IAM policies, and IMDSv2 details.
 
-Dockenciler supports AWS ECR and GCR / Artifact Registry. For GCR or Artifact Registry, replace the ECR config with:
+#### GCR / Artifact Registry
 
 **`config.json`:**
 ```json
@@ -93,7 +96,7 @@ Dockenciler supports AWS ECR and GCR / Artifact Registry. For GCR or Artifact Re
 }
 ```
 
-No ECR-related env vars are needed. The `adc` method (default) picks up `GOOGLE_APPLICATION_CREDENTIALS`, GCE/GKE metadata, or `gcloud auth application-default login`. For a service account JSON key, switch to `"method": "service_account"` and set `"service_account_file"` to the key path.
+No ECR-related env vars are needed. The `adc` method (default) picks up `GOOGLE_APPLICATION_CREDENTIALS`, GCE/GKE metadata, or `gcloud auth application-default login`. For a service account JSON key, switch to `"method": "service_account"` and set `"service_account_file"` to the key path. See [GCR Provider](docs/providers/gcr.md) for auth methods, supported hostnames, and IAM setup.
 
 Start the container:
 
