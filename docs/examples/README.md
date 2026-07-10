@@ -34,7 +34,7 @@ services:
       - ./docs/examples/ecr-basic.json:/home/dockenciler/config.json:ro
     command: ["/home/dockenciler/config.json"]
     environment:
-      DOCKENCILER_LOG_LEVEL: info
+      LOG_LEVEL: info
 ```
 
 ## Credential safety

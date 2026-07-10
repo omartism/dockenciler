@@ -60,9 +60,9 @@ The Docker socket at `/var/run/docker.sock` is mounted into the container so Doc
 ### 3. Create `.env`
 
 ```bash
-DOCKENCILER_LOG_LEVEL=info
-DOCKENCILER_REGISTRY_ECR_ACCESS_KEY=YOUR_AWS_ACCESS_KEY_ID
-DOCKENCILER_REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
+LOG_LEVEL=info
+REGISTRY_ECR_ACCESS_KEY=YOUR_AWS_ACCESS_KEY_ID
+REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
 ```
 
 Replace the access key and secret key with your actual AWS credentials. If you are running on an EC2 instance with an IAM role, leave the keys empty and Dockenciler will use IMDSv2 automatically.
@@ -113,7 +113,7 @@ And remove the ECR env vars from `.env`. No service account file is needed when 
 ## Where to go next
 
 - [Installation](installation.md) — Docker Compose (with or without a config file), Docker Swarm, standalone binary, and from-source builds.
-- [Configuration](configuration.md) — every environment variable, JSON config field, and CLI option. The env-var reference uses the correct `DOCKENCILER_NOTIFICATIONS_*` prefix for all notification providers.
+- [Configuration](configuration.md) — every environment variable, JSON config field, and CLI option. The env-var reference uses the correct `NOTIFICATIONS_*` naming for all notification providers.
 - [Providers](providers/README.md) — AWS ECR (access keys or IMDSv2) and GCR / Artifact Registry (ADC or service-account JSON key).
 - [Notifications](notifications.md) — Slack, Discord, Telegram, Email, MS Teams, and Google Chat. Customizable templates with Go `text/template`.
 - [Security](security.md) — permissions, secrets management, and Docker socket hardening.
@@ -123,9 +123,9 @@ And remove the ECR env vars from `.env`. No service account file is needed when 
 
 ## Features
 
-**Flexible Image Matching.** Update on the `latest` tag, an exact version like `v1.2.3`, a regex pattern like `^v\\d+\\.\\d+\\.\\d+$`, or a specific digest. Set criteria in the `criteria` block of `config.json` or via `DOCKENCILER_CRITERIA_*` environment variables. When no criteria are set, any change in the image digest triggers an update.
+**Flexible Image Matching.** Update on the `latest` tag, an exact version like `v1.2.3`, a regex pattern like `^v\\d+\\.\\d+\\.\\d+$`, or a specific digest. Set criteria in the `criteria` block of `config.json` or via `CRITERIA_*` environment variables. When no criteria are set, any change in the image digest triggers an update.
 
-**Selective Targeting.** By default, only containers with the label `dockenciler.autoupdate=true` are watched. The label is fully configurable through `docker.label_filter` / `DOCKENCILER_DOCKER_LABEL_FILTER`.
+**Selective Targeting.** By default, only containers with the label `dockenciler.autoupdate=true` are watched. The label is fully configurable through `docker.label_filter` / `DOCKER_LABEL_FILTER`.
 
 **Update Strategies.** Two strategies depending on the deployment mode:
 - **In-place (default):** For standalone containers — the container is stopped, the new image is pulled, and the container is recreated with the same name, ports, volumes, networks, and environment.
@@ -135,12 +135,12 @@ And remove the ECR env vars from `.env`. No service account file is needed when 
 - **AWS ECR:** Static IAM access keys or IMDSv2 instance role (recommended on EC2). Uses AWS SDK v2 `GetAuthorizationToken` with a 5-minute auth token buffer.
 - **GCR / Artifact Registry:** Application Default Credentials or a service-account JSON key file. Uses the Docker Registry v2 HTTP API (`HEAD /v2/<path>/manifests/<tag>`) with a 5-minute OAuth2 token cache. Supported hostnames: `gcr.io`, `*.gcr.io`, `*-docker.pkg.dev`.
 
-**Notifications.** Seven providers: always-on structured log output, plus Slack, Discord, Telegram, Email, MS Teams, and Google Chat. Each supports Go `text/template` message customization. Templates are set under `notifications.templates` in `config.json` or via `DOCKENCILER_NOTIFICATIONS_TEMPLATES_*` environment variables. Multiple providers can be active simultaneously.
+**Notifications.** Seven providers: always-on structured log output, plus Slack, Discord, Telegram, Email, MS Teams, and Google Chat. Each supports Go `text/template` message customization. Templates are set under `notifications.templates` in `config.json` or via `NOTIFICATIONS_TEMPLATES_*` environment variables. Multiple providers can be active simultaneously.
 
-**Configuration.** Three layers: binary defaults (`pkg/config/config.go:97-129`), optional JSON config file (path from CLI arg), and `DOCKENCILER_*` environment variables. Env vars override JSON and defaults. See [Configuration](configuration.md) for the complete reference, including the correct `DOCKENCILER_NOTIFICATIONS_*` naming for all notification providers.
+**Configuration.** Three layers: binary defaults (`pkg/config/config.go:97-129`), optional JSON config file (path from CLI arg), and environment variables (no prefix). Env vars override JSON and defaults. See [Configuration](configuration.md) for the complete reference, including the correct `NOTIFICATIONS_*` naming for all notification providers.
 
 **Safety Rails.**
-- **Dry-run mode:** Set `dry_run: true` or `DOCKENCILER_DRY_RUN=true` to log intended updates without applying them.
+- **Dry-run mode:** Set `dry_run: true` or `DRY_RUN=true` to log intended updates without applying them.
 - **Self-update exclusion:** Any container with the label `dockenciler.instance=true` is automatically skipped (`pkg/reconciler/reconciler.go:73-79`). All example compose files include this label on the Dockenciler service itself.
 - **Exclusion list:** A configurable list of container IDs in `exclusions` prevents specific containers from being updated. Use the JSON array form in `config.json` — env-var comma-splitting is not verified to work (`pkg/config/config.go:55`, no `StringToSliceHookFunc` configured).
 

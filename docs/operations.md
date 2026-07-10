@@ -2,7 +2,7 @@
 
 ## Logs
 
-Dockenciler uses Go's structured `log/slog` package for logging. The log level is set via `DOCKENCILER_LOG_LEVEL` or the `log_level` field in `config.json`.
+Dockenciler uses Go's structured `log/slog` package for logging. The log level is set via `LOG_LEVEL` or the `log_level` field in `config.json`.
 
 | Level | When to use |
 |---|---|
@@ -11,7 +11,7 @@ Dockenciler uses Go's structured `log/slog` package for logging. The log level i
 | `warn` | Unexpected but non-fatal conditions |
 | `error` | Failures that skip a container (auth errors, pull failures, API errors) |
 
-Colorized output is enabled by default (`DOCKENCILER_COLOR_LOGS=true`, `pkg/config/config.go:109`). Colors only render on TTY terminals. Set `DOCKENCILER_COLOR_LOGS=false` for non-TTY environments (e.g., log aggregators).
+Colorized output is enabled by default (`COLOR_LOGS=true`, `pkg/config/config.go:109`). Colors only render on TTY terminals. Set `COLOR_LOGS=false` for non-TTY environments (e.g., log aggregators).
 
 Log output goes to stdout. There is no built-in file logging, log rotation, or JSON output toggle — `slog` defaults to text format.
 
@@ -46,7 +46,7 @@ The startup sequence logs:
 
 ### Debug logging
 
-Enable `log_level: "debug"` (or `DOCKENCILER_LOG_LEVEL=debug`) to see:
+Enable `log_level: "debug"` (or `LOG_LEVEL=debug`) to see:
 
 - Current digest for every container: `"Got current image digest"` (line 109 of reconciler.go).
 - Registry digest for every container: `"Got latest registry digest"` (line 121).
@@ -66,7 +66,7 @@ Dry-run mode logs intended updates without pulling images or recreating containe
 Or via environment variable:
 
 ```bash
-DOCKENCILER_DRY_RUN=true
+DRY_RUN=true
 ```
 
 When dry-run is active, the reconciler still resolves the current and latest digests and compares them. If they differ, it logs:
@@ -89,7 +89,7 @@ Containers can be excluded from reconciliation by their container ID via the `ex
 }
 ```
 
-**Important:** Use the JSON array form in `config.json`. The env-var form (`DOCKENCILER_EXCLUSIONS=abc123,def456`) is not verified to work — Viper is not configured with a `StringToSliceHookFunc` (`pkg/config/config.go`, no `StringToSlice` hook). See [Troubleshooting](troubleshooting.md#dockenciler_exclusionsid1id2-not-working) for details.
+**Important:** Use the JSON array form in `config.json`. The env-var form (`EXCLUSIONS=abc123,def456`) is not verified to work — Viper is not configured with a `StringToSliceHookFunc` (`pkg/config/config.go`, no `StringToSlice` hook). See [Troubleshooting](troubleshooting.md#exclusionsid1id2-not-working) for details.
 
 ## Self-update exclusion
 
@@ -174,7 +174,7 @@ make build
 ./dockenciler /path/to/config.json
 
 # Run with env vars only (no config file)
-DOCKENCILER_REGISTRY_TYPE=gcr DOCKENCILER_REGISTRY_GCR_AUTH_METHOD=adc ./dockenciler
+REGISTRY_TYPE=gcr REGISTRY_GCR_AUTH_METHOD=adc ./dockenciler
 ```
 
 The Makefile provides the following targets:

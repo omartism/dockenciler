@@ -37,7 +37,7 @@ services:
 
 The `command:` line passes the config file path to Dockenciler. The binary's `ENTRYPOINT` is `/dockenciler`; this single-element array is appended so the effective invocation becomes `/dockenciler /home/dockenciler/config.json`.
 
-If you prefer to use environment variables only (no `config.json`), omit the `command:` line and the config file volume mount. All options can be set via `DOCKENCILER_*` environment variables in the `.env` file.
+If you prefer to use environment variables only (no `config.json`), omit the `command:` line and the config file volume mount. All options can be set via environment variables in the `.env` file.
 
 > **Note:** Dockenciler needs access to the Docker socket to manage containers. The image runs as root by default, which has the necessary permissions. If you run it as a non-root user, ensure the user is in the `docker` group (e.g., via `group_add` in Docker Compose or `--group-add docker` with `docker service create`).
 
@@ -68,9 +68,9 @@ Create `config.json` with your basic settings:
 Place environment-specific secrets in `.env` (copy from `.env.example`):
 
 ```bash
-DOCKENCILER_REGISTRY_ECR_ACCESS_KEY=YOUR_AWS_ACCESS_KEY_ID
-DOCKENCILER_REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
-DOCKENCILER_NOTIFICATIONS_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/xxxx
+REGISTRY_ECR_ACCESS_KEY=YOUR_AWS_ACCESS_KEY_ID
+REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
+NOTIFICATIONS_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/xxxx
 ```
 
 Start the container:
@@ -90,10 +90,10 @@ services:
   dockenciler:
     image: ghcr.io/omartism/dockenciler:latest
     environment:
-      DOCKENCILER_REGISTRY_TYPE: "ecr"
-      DOCKENCILER_DOCKER_LABEL_FILTER: "dockenciler.autoupdate=true"
-      DOCKENCILER_REGISTRY_ECR_REGION: "eu-west-2"
-      DOCKENCILER_RECONCILE_INTERVAL: "1m"
+      REGISTRY_TYPE: "ecr"
+      DOCKER_LABEL_FILTER: "dockenciler.autoupdate=true"
+      REGISTRY_ECR_REGION: "eu-west-2"
+      RECONCILE_INTERVAL: "1m"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
@@ -134,7 +134,7 @@ Dockenciler includes a `Makefile` for convenience:
 
 ## ⚙️ Configuration
 
-Dockenciler is configured through a JSON file (passed as a command-line argument) and environment variables. Environment variables take precedence over the JSON file. All env vars use the `DOCKENCILER_` prefix with dots replaced by underscores for nested keys (e.g., `notifications.slack_webhook_url` becomes `DOCKENCILER_NOTIFICATIONS_SLACK_WEBHOOK_URL`).
+Dockenciler is configured through a JSON file (passed as a command-line argument) and environment variables. Environment variables take precedence over the JSON file. All env vars correspond to the config key with dots replaced by underscores (e.g., `notifications.slack_webhook_url` becomes `NOTIFICATIONS_SLACK_WEBHOOK_URL`).
 
 See the [Configuration Reference](docs/configuration.md) for the complete list of options with defaults, JSON structure, and environment variable mappings.
 

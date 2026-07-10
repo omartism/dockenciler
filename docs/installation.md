@@ -44,7 +44,7 @@ services:
 **`.env`:**
 
 ```bash
-DOCKENCILER_LOG_LEVEL=info
+LOG_LEVEL=info
 ```
 
 > **Why the `command:` line?** The Dockerfile uses `ENTRYPOINT ["/dockenciler"]` with no `CMD` (`Dockerfile:43`). The binary reads its config path from `os.Args[1]` (`cmd/dockenciler/main.go:109-114`). Mounting `config.json` at `/home/dockenciler/config.json` without passing that path means the file is never read. The `command:` line appends the path as an argument to the entrypoint. Without it, the file mount has no effect.
@@ -87,10 +87,10 @@ services:
   dockenciler:
     image: ghcr.io/omartism/dockenciler:latest
     environment:
-      DOCKENCILER_REGISTRY_TYPE: "ecr"
-      DOCKENCILER_REGISTRY_ECR_REGION: "eu-west-2"
-      DOCKENCILER_DOCKER_LABEL_FILTER: "dockenciler.autoupdate=true"
-      DOCKENCILER_RECONCILE_INTERVAL: "1m"
+      REGISTRY_TYPE: "ecr"
+      REGISTRY_ECR_REGION: "eu-west-2"
+      DOCKER_LABEL_FILTER: "dockenciler.autoupdate=true"
+      RECONCILE_INTERVAL: "1m"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:

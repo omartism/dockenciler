@@ -49,7 +49,7 @@ Same root cause as above, but for GCR. Use `registry.gcr` instead of flat fields
 }
 ```
 
-### `DOCKENCILER_EXCLUSIONS=id1,id2` not working
+### `EXCLUSIONS=id1,id2` not working
 
 The `exclusions` field is a `[]string` in Go. The Viper configuration (`pkg/config/config.go`) does not include a `StringToSliceHookFunc` to split comma-separated strings. The env-var form is not verified to work.
 
@@ -199,7 +199,7 @@ If you are unsure of the IANA name, use `""` or `"Host"` to fall back to the sys
 Enable debug logging to see the full startup sequence:
 
 ```bash
-DOCKENCILER_LOG_LEVEL=debug
+LOG_LEVEL=debug
 ```
 
 ## Getting help
@@ -210,7 +210,7 @@ If the troubleshooting steps above do not resolve your issue, open a GitHub issu
 
 Include the following in your bug report:
 
-- The full startup log (with `DOCKENCILER_LOG_LEVEL=debug`).
+- The full startup log (with `LOG_LEVEL=debug`).
 - Your configuration file (with secrets redacted).
 - The Docker version (`docker version`) and platform.
 - Whether you are running the binary or the Docker image.

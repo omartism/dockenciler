@@ -29,10 +29,10 @@ The ECR provider is configured under `registry.ecr` in the JSON config file. The
 
 | Variable | Description | Default |
 |---|---|---|
-| `DOCKENCILER_REGISTRY_TYPE` | Set to `ecr` | `""` |
-| `DOCKENCILER_REGISTRY_ECR_REGION` | AWS region (required) | `""` |
-| `DOCKENCILER_REGISTRY_ECR_ACCESS_KEY` | AWS access key (leave empty for IMDSv2) | `""` |
-| `DOCKENCILER_REGISTRY_ECR_SECRET_KEY` | AWS secret key (leave empty for IMDSv2) | `""` |
+| `REGISTRY_TYPE` | Set to `ecr` | `""` |
+| `REGISTRY_ECR_REGION` | AWS region (required) | `""` |
+| `REGISTRY_ECR_ACCESS_KEY` | AWS access key (leave empty for IMDSv2) | `""` |
+| `REGISTRY_ECR_SECRET_KEY` | AWS secret key (leave empty for IMDSv2) | `""` |
 
 The `access_key` and `secret_key` fields are optional. When both are empty, the AWS SDK resolves credentials from the environment or EC2 instance metadata. See [Authentication](#authentication) below.
 

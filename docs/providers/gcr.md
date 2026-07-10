@@ -55,9 +55,9 @@ The GCR provider is configured under `registry.gcr` in the JSON config file, wit
 
 | Variable | Description | Default |
 |---|---|---|
-| `DOCKENCILER_REGISTRY_TYPE` | Set to `gcr` | `""` |
-| `DOCKENCILER_REGISTRY_GCR_AUTH_METHOD` | Auth method: `adc` or `service_account` | `"adc"` |
-| `DOCKENCILER_REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE` | Path to GCP service account JSON key | `""` |
+| `REGISTRY_TYPE` | Set to `gcr` | `""` |
+| `REGISTRY_GCR_AUTH_METHOD` | Auth method: `adc` or `service_account` | `"adc"` |
+| `REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE` | Path to GCP service account JSON key | `""` |
 
 ## Authentication
 

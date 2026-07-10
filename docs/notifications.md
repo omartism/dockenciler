@@ -39,7 +39,7 @@ Configure Dockenciler:
 Or via environment variable:
 
 ```bash
-DOCKENCILER_NOTIFICATIONS_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/your-webhook-url
+NOTIFICATIONS_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/your-webhook-url
 ```
 
 ### Discord
@@ -75,8 +75,8 @@ DOCKENCILER_NOTIFICATIONS_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/you
 Or via environment variables:
 
 ```bash
-DOCKENCILER_NOTIFICATIONS_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-DOCKENCILER_NOTIFICATIONS_TELEGRAM_CHAT_ID=123456789
+NOTIFICATIONS_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+NOTIFICATIONS_TELEGRAM_CHAT_ID=123456789
 ```
 
 ### Email
@@ -129,14 +129,14 @@ If `email_port` is not set, there is no default — the provider requires it. Ty
 Or via environment variable:
 
 ```bash
-DOCKENCILER_NOTIFICATIONS_GOOGLE_CHAT_WEBHOOK_URL=https://chat.googleapis.com/v1/spaces/...
+NOTIFICATIONS_GOOGLE_CHAT_WEBHOOK_URL=https://chat.googleapis.com/v1/spaces/...
 ```
 
 ## Log notifier (always-on)
 
 The Log notifier is always active. It renders the notification template and emits it via `slog.Logger.Log()` at the appropriate level (`info`, `warning`, or `error`) (`pkg/notifier/notifier.go:119-136`).
 
-The log output is structured text (slog text-handler format, key=value pairs) when `DOCKENCILER_COLOR_LOGS=false`, or human-readable with colors (default, TTY only). Log level is controlled by `DOCKENCILER_LOG_LEVEL`.
+The log output is structured text (slog text-handler format, key=value pairs) when `COLOR_LOGS=false`, or human-readable with colors (default, TTY only). Log level is controlled by `LOG_LEVEL`.
 
 ## Templates
 
@@ -199,7 +199,7 @@ The following example overrides the Telegram and Slack templates with a custom m
 Or via environment variables:
 
 ```bash
-DOCKENCILER_NOTIFICATIONS_TEMPLATES_SLACK="*Container updated*\nImage: {{.Image}}\nFrom: {{.OldDigest}}\nTo: {{.NewDigest}}"
+NOTIFICATIONS_TEMPLATES_SLACK="*Container updated*\nImage: {{.Image}}\nFrom: {{.OldDigest}}\nTo: {{.NewDigest}}"
 ```
 
 ## Composite notifier architecture

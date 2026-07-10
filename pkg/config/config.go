@@ -90,8 +90,8 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetConfigFile(path)
 	v.SetConfigType("json")
 
-	// Enable environment variable overrides with DOCKENCILER prefix
-	v.SetEnvPrefix("DOCKENCILER")
+	// Enable environment variable overrides (no prefix)
+	v.SetEnvPrefix("")
 	v.AutomaticEnv()
 
 	// Set defaults so AutomaticEnv knows which keys to look for

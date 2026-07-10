@@ -41,7 +41,7 @@ The example values in the documentation use safe placeholders (e.g., `YOUR_AWS_A
 
 | Pattern | Description |
 |---|---|
-| **Environment variables only** | Skip `config.json` entirely. Pass all sensitive values via env vars (`DOCKENCILER_NOTIFICATIONS_*`, `DOCKENCILER_REGISTRY_ECR_*`). Example in [Installation](installation.md#configuration-via-env-only-no-configjson). |
+| **Environment variables only** | Skip `config.json` entirely. Pass all sensitive values via env vars (`NOTIFICATIONS_*`, `REGISTRY_ECR_*`). Example in [Installation](installation.md#configuration-via-env-only-no-configjson). |
 | **Docker Secrets** | Use Docker Swarm secrets for `service_account_file` or `email_password`. Mount secrets as files and reference them by path. |
 | **Sealed Secrets** | For GitOps workflows, encrypt secrets with `kubeseal` / Bitnami Sealed Secrets and decrypt at deploy time. |
 | **Vault sidecar** | Use HashiCorp Vault or similar to inject secrets into the environment at runtime. |
@@ -104,7 +104,7 @@ Telegram bot tokens are similarly sensitive — a leaked token allows anyone to 
 Notification provider secrets — Slack/Discord/MS Teams/Google Chat webhook URLs, Telegram bot tokens, and SMTP passwords — are bearer tokens that grant write access to the destination. Treat them as carefully as database credentials:
 
 - Do not commit them in `config.json` or in `.env` files that get committed.
-- Pass them via environment variables (`DOCKENCILER_NOTIFICATIONS_*`) read from a secret manager (Docker secrets, Kubernetes secrets, Vault, AWS Secrets Manager, etc.).
+- Pass them via environment variables (`NOTIFICATIONS_*`) read from a secret manager (Docker secrets, Kubernetes secrets, Vault, AWS Secrets Manager, etc.).
 - Rotate immediately if exposure is suspected.
 
 ## Self-update safety

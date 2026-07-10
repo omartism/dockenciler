@@ -29,7 +29,7 @@ Two registry providers are supported. Choose based on where your images are stor
 
 ## How the provider is selected
 
-The provider is selected by setting `registry.type` in the JSON config or `DOCKENCILER_REGISTRY_TYPE` in the environment. The value must be `"ecr"` or `"gcr"` (`cmd/dockenciler/main.go:51-69`). Any other value causes the binary to exit with `"Unsupported registry type"`.
+The provider is selected by setting `registry.type` in the JSON config or `REGISTRY_TYPE` in the environment. The value must be `"ecr"` or `"gcr"` (`cmd/dockenciler/main.go:51-69`). Any other value causes the binary to exit with `"Unsupported registry type"`.
 
 Each provider's configuration (region, auth method, credentials) lives in its own nested sub-block under `registry`:
 

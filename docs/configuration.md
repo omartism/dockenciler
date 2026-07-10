@@ -6,7 +6,7 @@ Dockenciler uses Viper (`github.com/spf13/viper`) for configuration. The loading
 
 1. **Defaults** set by `v.SetDefault()` in `pkg/config/config.go:97-129`.
 2. **JSON config file** (optional) — path is the first and only CLI positional argument.
-3. **Environment variables** — all prefixed with `DOCKENCILER_`; nested keys use `_` as a separator (`pkg/config/config.go:94` and `pkg/config/config.go:132`).
+3. **Environment variables** — no prefix; nested keys use `_` as a separator (`pkg/config/config.go:94` and `pkg/config/config.go:132`).
 
 If both the JSON file and an environment variable set the same value, **the environment variable wins**.
 
@@ -160,89 +160,89 @@ For a GCR service account, set the auth method and file path:
 
 ## Environment variables
 
-All environment variables use the prefix `DOCKENCILER_`. Nested configuration keys (separated by `.` in JSON) become underscores. For example, `notifications.slack_webhook_url` becomes `DOCKENCILER_NOTIFICATIONS_SLACK_WEBHOOK_URL`.
+Environment variables map directly to config keys — no prefix is used. Nested configuration keys (separated by `.` in JSON) become underscores. For example, `notifications.slack_webhook_url` becomes `NOTIFICATIONS_SLACK_WEBHOOK_URL`.
 
-This mapping is handled by `v.SetEnvPrefix("DOCKENCILER")` (`pkg/config/config.go:94`) combined with `v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))` (`pkg/config/config.go:132`).
+This mapping is handled by `v.SetEnvPrefix("")` (`pkg/config/config.go:94`) combined with `v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))` (`pkg/config/config.go:132`).
 
 ### Registry
 
 | Environment variable | JSON path | Description | Default |
 |---|---|---|---|
-| `DOCKENCILER_REGISTRY_TYPE` | `registry.type` | Registry provider: `ecr` or `gcr` | `""` |
-| `DOCKENCILER_REGISTRY_ECR_REGION` | `registry.ecr.region` | AWS region | `""` |
-| `DOCKENCILER_REGISTRY_ECR_ACCESS_KEY` | `registry.ecr.access_key` | AWS access key (leave empty for IMDSv2) | `""` |
-| `DOCKENCILER_REGISTRY_ECR_SECRET_KEY` | `registry.ecr.secret_key` | AWS secret key | `""` |
-| `DOCKENCILER_REGISTRY_GCR_AUTH_METHOD` | `registry.gcr.auth.method` | GCR auth method: `adc` or `service_account` | `"adc"` |
-| `DOCKENCILER_REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE` | `registry.gcr.auth.service_account_file` | Path to GCP service account JSON key | `""` |
+| `REGISTRY_TYPE` | `registry.type` | Registry provider: `ecr` or `gcr` | `""` |
+| `REGISTRY_ECR_REGION` | `registry.ecr.region` | AWS region | `""` |
+| `REGISTRY_ECR_ACCESS_KEY` | `registry.ecr.access_key` | AWS access key (leave empty for IMDSv2) | `""` |
+| `REGISTRY_ECR_SECRET_KEY` | `registry.ecr.secret_key` | AWS secret key | `""` |
+| `REGISTRY_GCR_AUTH_METHOD` | `registry.gcr.auth.method` | GCR auth method: `adc` or `service_account` | `"adc"` |
+| `REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE` | `registry.gcr.auth.service_account_file` | Path to GCP service account JSON key | `""` |
 
 ### Docker
 
 | Environment variable | JSON path | Description | Default |
 |---|---|---|---|
-| `DOCKENCILER_DOCKER_SOCKET_PATH` | `docker.socket_path` | Docker engine socket path | `"/var/run/docker.sock"` |
-| `DOCKENCILER_DOCKER_LABEL_FILTER` | `docker.label_filter` | Label selector for containers to watch | `"dockenciler.autoupdate=true"` |
+| `DOCKER_SOCKET_PATH` | `docker.socket_path` | Docker engine socket path | `"/var/run/docker.sock"` |
+| `DOCKER_LABEL_FILTER` | `docker.label_filter` | Label selector for containers to watch | `"dockenciler.autoupdate=true"` |
 
 ### Application
 
 | Environment variable | JSON path | Description | Default |
 |---|---|---|---|
-| `DOCKENCILER_RECONCILE_INTERVAL` | `reconcile_interval` | Duration between reconciliation loops | Binary: `"1h"`, Docker image: `"5m"` (overridden via `Dockerfile:33`) |
-| `DOCKENCILER_LOG_LEVEL` | `log_level` | Log level: `debug`, `info`, `warn`, `error` | `"info"` |
-| `DOCKENCILER_COLOR_LOGS` | `color_logs` | Enable colorized log output | `true` |
-| `DOCKENCILER_DRY_RUN` | `dry_run` | Preview updates without applying them | `false` |
-| `DOCKENCILER_EXCLUSIONS` | `exclusions` | Container IDs to skip | `[]` |
-| `DOCKENCILER_TIMEZONE` | `timezone` | Timezone: `"Host"` (system) or IANA name | `"Host"` |
+| `RECONCILE_INTERVAL` | `reconcile_interval` | Duration between reconciliation loops | Binary: `"1h"`, Docker image: `"5m"` (overridden via `Dockerfile:33`) |
+| `LOG_LEVEL` | `log_level` | Log level: `debug`, `info`, `warn`, `error` | `"info"` |
+| `COLOR_LOGS` | `color_logs` | Enable colorized log output | `true` |
+| `DRY_RUN` | `dry_run` | Preview updates without applying them | `false` |
+| `EXCLUSIONS` | `exclusions` | Container IDs to skip | `[]` |
+| `TIMEZONE` | `timezone` | Timezone: `"Host"` (system) or IANA name | `"Host"` |
 
 ### Criteria
 
 | Environment variable | JSON path | Description | Default |
 |---|---|---|---|
-| `DOCKENCILER_CRITERIA_VERSION` | `criteria.version` | Exact image tag to match | `""` |
-| `DOCKENCILER_CRITERIA_REGEX` | `criteria.regex` | Regex pattern to match image tags | `""` |
-| `DOCKENCILER_CRITERIA_DIGEST` | `criteria.digest` | Exact image digest to match | `""` |
+| `CRITERIA_VERSION` | `criteria.version` | Exact image tag to match | `""` |
+| `CRITERIA_REGEX` | `criteria.regex` | Regex pattern to match image tags | `""` |
+| `CRITERIA_DIGEST` | `criteria.digest` | Exact image digest to match | `""` |
 
 ### Notifications
 
 | Environment variable | JSON path | Description | Default |
 |---|---|---|---|
-| `DOCKENCILER_NOTIFICATIONS_SLACK_WEBHOOK_URL` | `notifications.slack_webhook_url` | Slack incoming webhook URL | `""` |
-| `DOCKENCILER_NOTIFICATIONS_DISCORD_WEBHOOK_URL` | `notifications.discord_webhook_url` | Discord webhook URL | `""` |
-| `DOCKENCILER_NOTIFICATIONS_TELEGRAM_BOT_TOKEN` | `notifications.telegram_bot_token` | Telegram bot token | `""` |
-| `DOCKENCILER_NOTIFICATIONS_TELEGRAM_CHAT_ID` | `notifications.telegram_chat_id` | Telegram chat ID | `""` |
-| `DOCKENCILER_NOTIFICATIONS_EMAIL_HOST` | `notifications.email_host` | SMTP server hostname | `""` |
-| `DOCKENCILER_NOTIFICATIONS_EMAIL_PORT` | `notifications.email_port` | SMTP server port | `""` |
-| `DOCKENCILER_NOTIFICATIONS_EMAIL_USER` | `notifications.email_user` | SMTP username | `""` |
-| `DOCKENCILER_NOTIFICATIONS_EMAIL_PASSWORD` | `notifications.email_password` | SMTP password | `""` |
-| `DOCKENCILER_NOTIFICATIONS_EMAIL_FROM` | `notifications.email_from` | Sender email address | `""` |
-| `DOCKENCILER_NOTIFICATIONS_EMAIL_TO` | `notifications.email_to` | Recipient email address | `""` |
-| `DOCKENCILER_NOTIFICATIONS_MSTEAMS_WEBHOOK_URL` | `notifications.msteams_webhook_url` | Microsoft Teams incoming webhook URL | `""` |
-| `DOCKENCILER_NOTIFICATIONS_GOOGLE_CHAT_WEBHOOK_URL` | `notifications.google_chat_webhook_url` | Google Chat webhook URL | `""` |
+| `NOTIFICATIONS_SLACK_WEBHOOK_URL` | `notifications.slack_webhook_url` | Slack incoming webhook URL | `""` |
+| `NOTIFICATIONS_DISCORD_WEBHOOK_URL` | `notifications.discord_webhook_url` | Discord webhook URL | `""` |
+| `NOTIFICATIONS_TELEGRAM_BOT_TOKEN` | `notifications.telegram_bot_token` | Telegram bot token | `""` |
+| `NOTIFICATIONS_TELEGRAM_CHAT_ID` | `notifications.telegram_chat_id` | Telegram chat ID | `""` |
+| `NOTIFICATIONS_EMAIL_HOST` | `notifications.email_host` | SMTP server hostname | `""` |
+| `NOTIFICATIONS_EMAIL_PORT` | `notifications.email_port` | SMTP server port | `""` |
+| `NOTIFICATIONS_EMAIL_USER` | `notifications.email_user` | SMTP username | `""` |
+| `NOTIFICATIONS_EMAIL_PASSWORD` | `notifications.email_password` | SMTP password | `""` |
+| `NOTIFICATIONS_EMAIL_FROM` | `notifications.email_from` | Sender email address | `""` |
+| `NOTIFICATIONS_EMAIL_TO` | `notifications.email_to` | Recipient email address | `""` |
+| `NOTIFICATIONS_MSTEAMS_WEBHOOK_URL` | `notifications.msteams_webhook_url` | Microsoft Teams incoming webhook URL | `""` |
+| `NOTIFICATIONS_GOOGLE_CHAT_WEBHOOK_URL` | `notifications.google_chat_webhook_url` | Google Chat webhook URL | `""` |
 
 ### Notification templates
 
 | Environment variable | JSON path | Description | Default |
 |---|---|---|---|
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_DEFAULT` | `notifications.templates.default` | Default notification template | `""` (built-in used) |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_SLACK` | `notifications.templates.slack` | Slack-specific template override | `""` (built-in used) |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_DISCORD` | `notifications.templates.discord` | Discord-specific template override | `""` (built-in used) |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_TELEGRAM` | `notifications.templates.telegram` | Telegram-specific template override | `""` (built-in used) |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_EMAIL` | `notifications.templates.email` | Email body template override | `""` (built-in used) |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_MSTEAMS` | `notifications.templates.msteams` | MS Teams-specific template override | `""` (built-in used) |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_GOOGLE_CHAT` | `notifications.templates.google_chat` | Google Chat-specific template override | `""` (built-in used) |
+| `NOTIFICATIONS_TEMPLATES_DEFAULT` | `notifications.templates.default` | Default notification template | `""` (built-in used) |
+| `NOTIFICATIONS_TEMPLATES_SLACK` | `notifications.templates.slack` | Slack-specific template override | `""` (built-in used) |
+| `NOTIFICATIONS_TEMPLATES_DISCORD` | `notifications.templates.discord` | Discord-specific template override | `""` (built-in used) |
+| `NOTIFICATIONS_TEMPLATES_TELEGRAM` | `notifications.templates.telegram` | Telegram-specific template override | `""` (built-in used) |
+| `NOTIFICATIONS_TEMPLATES_EMAIL` | `notifications.templates.email` | Email body template override | `""` (built-in used) |
+| `NOTIFICATIONS_TEMPLATES_MSTEAMS` | `notifications.templates.msteams` | MS Teams-specific template override | `""` (built-in used) |
+| `NOTIFICATIONS_TEMPLATES_GOOGLE_CHAT` | `notifications.templates.google_chat` | Google Chat-specific template override | `""` (built-in used) |
 
-> **Important:** Setting `DOCKENCILER_EXCLUSIONS` as a comma-separated string (e.g. `DOCKENCILER_EXCLUSIONS=id1,id2`) is not verified to work. The Viper configuration in `pkg/config/config.go` does not include a `StringToSliceHookFunc` to split strings on commas, and the existing test at `pkg/config/config_test.go:175-189` only tests `json.Unmarshal` directly. Use the JSON array form in `config.json` instead. See [Troubleshooting](troubleshooting.md) for details.
+> **Important:** Setting `EXCLUSIONS` as a comma-separated string (e.g. `EXCLUSIONS=id1,id2`) is not verified to work. The Viper configuration in `pkg/config/config.go` does not include a `StringToSliceHookFunc` to split strings on commas, and the existing test at `pkg/config/config_test.go:175-189` only tests `json.Unmarshal` directly. Use the JSON array form in `config.json` instead. See [Troubleshooting](troubleshooting.md) for details.
 
 ## Loading order examples
 
 ### Env-only configuration
 
 ```bash
-DOCKENCILER_REGISTRY_TYPE=ecr
-DOCKENCILER_REGISTRY_ECR_REGION=us-east-1
-DOCKENCILER_REGISTRY_ECR_ACCESS_KEY=YOUR_AWS_ACCESS_KEY_ID
-DOCKENCILER_REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
-DOCKENCILER_LOG_LEVEL=info
-DOCKENCILER_RECONCILE_INTERVAL=30m
+REGISTRY_TYPE=ecr
+REGISTRY_ECR_REGION=us-east-1
+REGISTRY_ECR_ACCESS_KEY=YOUR_AWS_ACCESS_KEY_ID
+REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
+LOG_LEVEL=info
+RECONCILE_INTERVAL=30m
 ```
 
 Run with just env vars:
@@ -259,7 +259,7 @@ dockenciler /etc/dockenciler/config.json
 
 ### JSON + env with env override
 
-If `config.json` sets `reconcile_interval` to `"1h"` but the environment has `DOCKENCILER_RECONCILE_INTERVAL=5m`, the runtime value will be `5m` — env wins.
+If `config.json` sets `reconcile_interval` to `"1h"` but the environment has `RECONCILE_INTERVAL=5m`, the runtime value will be `5m` — env wins.
 
 ### Partial JSON with defaults filling in
 
