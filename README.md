@@ -5,50 +5,75 @@ Dockenciler is a lightweight and efficient open-source Docker reconciler written
 ## 🚀 Features
 
 - **Flexible Image Matching**: Update containers based on the `latest` tag, specific version numbers, or custom regular expressions.
-- **Smart Filtering**: 
-  - Update all containers by default.
-  - Or, target specific containers using the label `dockenciler.autoupdate=true` (customizable).
-- **Update Strategies**:
-  - **In-place (Default)**: Recreates the container with the new image.
-  - **Rolling Update**: Supports rolling updates for minimized downtime when running in Docker Swarm mode.
-- **Docker Swarm Support**: Fully compatible with Docker Swarm orchestration.
-- **Secure Authentication**:
-  - **AWS ECR**: IAM Access Keys / Secret Keys or IMDSv2 instance role (recommended for EC2).
-  - **GCR / Artifact Registry**: Application Default Credentials (ADC) or Service Account JSON Key.
-- **Extensive Notifications**: Get notified about update events via:
-  - Email, Slack, MS Teams, Google Chat, Telegram, Discord, and local logs.
-  - *Customizable notification templates for clear and concise alerts.*
-- **Configuration**: Easily configured via JSON files or environment variables.
-- **Safety Rails**:
-  - **Dry-Run Mode**: Preview updates without applying changes.
-  - **Self-Update Exclusion**: Automatically skips the Dockenciler instance itself (via `dockenciler.instance=true` label) and configurable exclusion lists.
+- **Smart Filtering**: Update all containers by default, or target specific containers using the label `dockenciler.autoupdate=true` (customizable via `docker.label_filter`).
+- **Update Strategies**: In-place container recreation (default) or rolling updates in Docker Swarm mode for minimized downtime.
+- **Secure Authentication**: AWS ECR (IAM access keys or IMDSv2 instance role) and GCR / Artifact Registry (ADC or service account JSON key).
+- **Extensive Notifications**: Email, Slack, MS Teams, Google Chat, Telegram, Discord, and local logs — all with customizable Go `text/template` templates.
+- **Safety Rails**: Dry-run mode, self-update exclusion via `dockenciler.instance=true` label, and configurable exclusion lists.
+- **Multiple Configuration Sources**: JSON config file, environment variables (env vars override file), and sensible defaults.
 
-## 🛠 Installation & Development
+## 🛠 Quickstart (Docker Compose)
 
-### Using Docker Compose
+The easiest way to run Dockenciler is with Docker Compose using a JSON configuration file.
 
-The easiest way to run Dockenciler is using Docker Compose.
+### Docker Compose Setup
 
-1. Create a `docker-compose.yml` file:
+Create a `docker-compose.yml`:
 
 ```yaml
 services:
   dockenciler:
     image: ghcr.io/omartism/dockenciler:latest
     container_name: dockenciler
+    restart: unless-stopped
     labels:
       - "dockenciler.instance=true"
+    command: ["/home/dockenciler/config.json"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./config.json:/config.json
-    environment:
-      - DOCKENCILER_LOG_LEVEL=info
-    restart: always
+      - ./config.json:/home/dockenciler/config.json:ro
+    env_file: .env
 ```
+
+The `command:` line passes the config file path to Dockenciler. The binary's `ENTRYPOINT` is `/dockenciler`; this single-element array is appended so the effective invocation becomes `/dockenciler /home/dockenciler/config.json`.
+
+If you prefer to use environment variables only (no `config.json`), omit the `command:` line and the config file volume mount. All options can be set via `DOCKENCILER_*` environment variables in the `.env` file.
 
 > **Note:** Dockenciler needs access to the Docker socket to manage containers. The image runs as root by default, which has the necessary permissions. If you run it as a non-root user, ensure the user is in the `docker` group (e.g., via `group_add` in Docker Compose or `--group-add docker` with `docker service create`).
 
-2. Start the container:
+### Self-update exclusion
+
+Dockenciler automatically skips containers labeled `dockenciler.instance=true`, preventing it from attempting to update its own container during reconciliation cycles. The `labels:` entry in the compose example above ensures this exclusion is applied.
+
+### Configuration
+
+Create `config.json` with your basic settings:
+
+```json
+{
+  "registry": {
+    "type": "ecr",
+    "ecr": {
+      "region": "us-east-1"
+    }
+  },
+  "reconcile_interval": "30m",
+  "log_level": "info",
+  "notifications": {
+    "slack_webhook_url": "https://hooks.slack.com/services/..."
+  }
+}
+```
+
+Place environment-specific secrets in `.env` (copy from `.env.example`):
+
+```bash
+DOCKENCILER_REGISTRY_ECR_ACCESS_KEY=YOUR_AWS_ACCESS_KEY_ID
+DOCKENCILER_REGISTRY_ECR_SECRET_KEY=YOUR_AWS_SECRET_ACCESS_KEY
+DOCKENCILER_NOTIFICATIONS_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/xxxx
+```
+
+Start the container:
 
 ```bash
 docker compose up -d
@@ -56,7 +81,9 @@ docker compose up -d
 
 ### Docker Swarm
 
-For Docker Swarm deployments, use a stack file:
+For Docker Swarm deployments, use a stack file. Dockenciler automatically detects Swarm mode and performs rolling updates on detected services. The service must run on manager nodes to access the Docker API:
+
+When updates are needed, Dockenciler updates the service definition (image and digest) rather than recreating containers directly, enabling zero-downtime rolling updates.
 
 ```yaml
 services:
@@ -64,7 +91,7 @@ services:
     image: ghcr.io/omartism/dockenciler:latest
     environment:
       DOCKENCILER_REGISTRY_TYPE: "ecr"
-      DOCKENCILER_DOCKER_LABEL_FILTER: "dockenciler.instance=true"
+      DOCKENCILER_DOCKER_LABEL_FILTER: "dockenciler.autoupdate=true"
       DOCKENCILER_REGISTRY_ECR_REGION: "eu-west-2"
       DOCKENCILER_RECONCILE_INTERVAL: "1m"
     volumes:
@@ -88,7 +115,7 @@ networks:
     external: true
 ```
 
-Deploy the stack:
+Deploy with:
 
 ```bash
 docker stack deploy -c dockenciler-stack.yml dockenciler
@@ -96,386 +123,58 @@ docker stack deploy -c dockenciler-stack.yml dockenciler
 
 ### Building from Source
 
-Dockenciler includes a `Makefile` for convenient development:
+Dockenciler includes a `Makefile` for convenience:
 
-- **Build**: `make build` - Compiles the binary to the root directory.
-- **Test**: `make test` - Runs all tests in the repository.
-- **Tidy**: `make tidy` - Cleans up `go.mod` and `go.sum`.
-- **Format**: `make fmt` - Formats code according to Go standards.
-- **Docker Image**: `make docker-build` - Builds the production Docker image.
-
+- **Build**: `make build` — Compiles the binary to `./dockenciler` in the project root.
+- **Test**: `make test` — Runs all tests (does not include the race detector; use `go test -race ./...` when debugging concurrency).
+- **Docker Image**: `make docker-build` — Multi-stage distroless build (`golang:1.26-alpine` → `gcr.io/distroless/static-debian12`, `CGO_ENABLED=0`, `-ldflags="-s -w"`).
+- **Run with Compose**: `make docker-up` — Starts via Docker Compose (needs `.env` from `.env.example`).
+- **Security Scan**: `make security-scan` — Runs Trivy filesystem scan (requires `trivy` CLI).
+- **Format / Tidy**: `make fmt` / `make tidy` — Code formatting and dependency cleanup.
 
 ## ⚙️ Configuration
 
-Dockenciler can be configured using a JSON file or environment variables. Environment variables take precedence over the JSON file.
+Dockenciler is configured through a JSON file (passed as a command-line argument) and environment variables. Environment variables take precedence over the JSON file. All env vars use the `DOCKENCILER_` prefix with dots replaced by underscores for nested keys (e.g., `notifications.slack_webhook_url` becomes `DOCKENCILER_NOTIFICATIONS_SLACK_WEBHOOK_URL`).
 
-### Environment Variables
-
-All environment variables are prefixed with `DOCKENCILER_`. Nested configuration fields are separated by underscores.
-
-| Environment Variable | JSON Path | Description | Default |
-|----------------------|-----------|-------------|---------|
-| `DOCKENCILER_LOG_LEVEL` | `log_level` | Log level (`debug`, `info`, `warn`, `error`) | `info` |
-| `DOCKENCILER_DRY_RUN` | `dry_run` | Enable dry-run mode | `false` |
-| `DOCKENCILER_RECONCILE_INTERVAL` | `reconcile_interval` | Interval between reconciliation loops | `1h` |
-| `DOCKENCILER_DOCKER_SOCKET_PATH` | `docker.socket_path` | Path to Docker socket | `/var/run/docker.sock` |
-| `DOCKENCILER_DOCKER_LABEL_FILTER` | `docker.label_filter` | Label to target containers | `dockenciler.autoupdate=true` |
-| `DOCKENCILER_REGISTRY_TYPE` | `registry.type` | Registry type (`ecr` or `gcr`) | - |
-| `DOCKENCILER_REGISTRY_ECR_REGION` | `registry.ecr.region` | AWS Region for ECR | - |
-| `DOCKENCILER_REGISTRY_ECR_ACCESS_KEY` | `registry.ecr.access_key` | AWS Access Key | - |
-| `DOCKENCILER_REGISTRY_ECR_SECRET_KEY` | `registry.ecr.secret_key` | AWS Secret Key | - |
-| `DOCKENCILER_REGISTRY_GCR_AUTH_METHOD` | `registry.gcr.auth.method` | GCR auth method (`adc` or `service_account`) | `adc` |
-| `DOCKENCILER_REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE` | `registry.gcr.auth.service_account_file` | Path to GCP service account JSON key file | - |
-| `DOCKENCILER_CRITERIA_VERSION` | `criteria.version` | Exact tag version to match | - |
-| `DOCKENCILER_CRITERIA_REGEX` | `criteria.regex` | Regex to match tags | - |
-| `DOCKENCILER_CRITERIA_DIGEST` | `criteria.digest` | Exact image digest to match | - |
-| `DOCKENCILER_EXCLUSIONS` | `exclusions` | Comma-separated list of container IDs to skip | `[]` |
-| `DOCKENCILER_TIMEZONE` | `timezone` | Timezone for notification timestamps (IANA name or `Host`) | `Host` |
-| `DOCKENCILER_SLACK_WEBHOOK_URL` | `notifications.slack_webhook_url` | Slack webhook URL | - |
-| `DOCKENCILER_DISCORD_WEBHOOK_URL` | `notifications.discord_webhook_url` | Discord webhook URL | - |
-| `DOCKENCILER_TELEGRAM_BOT_TOKEN` | `notifications.telegram_bot_token` | Telegram bot token | - |
-| `DOCKENCILER_TELEGRAM_CHAT_ID` | `notifications.telegram_chat_id` | Telegram chat ID | - |
-| `DOCKENCILER_EMAIL_HOST` | `notifications.email_host` | SMTP host | - |
-| `DOCKENCILER_EMAIL_PORT` | `notifications.email_port` | SMTP port | - |
-| `DOCKENCILER_EMAIL_USER` | `notifications.email_user` | SMTP username | - |
-| `DOCKENCILER_EMAIL_PASSWORD` | `notifications.email_password` | SMTP password | - |
-| `DOCKENCILER_EMAIL_FROM` | `notifications.email_from` | Sender email address | - |
-| `DOCKENCILER_EMAIL_TO` | `notifications.email_to` | Recipient email address | - |
-| `DOCKENCILER_MSTEAMS_WEBHOOK_URL` | `notifications.msteams_webhook_url` | Microsoft Teams webhook URL | - |
-| `DOCKENCILER_GOOGLE_CHAT_WEBHOOK_URL` | `notifications.google_chat_webhook_url` | Google Chat webhook URL | - |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_DEFAULT` | `notifications.templates.default` | Default notification template (Go text/template) | Built-in |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_SLACK` | `notifications.templates.slack` | Slack-specific template override | `default` |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_DISCORD` | `notifications.templates.discord` | Discord-specific template override | `default` |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_TELEGRAM` | `notifications.templates.telegram` | Telegram-specific template override | `default` |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_EMAIL` | `notifications.templates.email` | Email body template override | `default` |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_MSTEAMS` | `notifications.templates.msteams` | MS Teams-specific template override | `default` |
-| `DOCKENCILER_NOTIFICATIONS_TEMPLATES_GOOGLE_CHAT` | `notifications.templates.google_chat` | Google Chat-specific template override | `default` |
-
-### Example Configuration (`config.json`)
-
-```json
-{
-  "registry": {
-    "type": "ecr",
-    "ecr": {
-      "region": "us-east-1",
-      "access_key": "AKIA...",
-      "secret_key": "..."
-    }
-  },
-  "docker": {
-    "socket_path": "/var/run/docker.sock",
-    "label_filter": "dockenciler.autoupdate=true"
-  },
-  "reconcile_interval": "30m",
-  "log_level": "info",
-  "criteria": {
-    "regex": "^v\\d+\\.\\d+\\.\\d+$"
-  },
-  "dry_run": false,
-  "exclusions": ["container_id_1", "container_id_2"],
-  "timezone": "America/New_York",
-  "notifications": {
-    "slack_webhook_url": "<your-slack-webhook-url>",
-    "templates": {
-      "default": "Container {{.ContainerID}} updated!\nImage: {{.Image}}\nOld: {{.OldDigest}}\nNew: {{.NewDigest}}",
-      "slack": "*{{.ContainerID}}* updated on {{.Image}}"
-    }
-  }
-}
-```
-
-### GCR / Artifact Registry
-
-Dockenciler supports Google Container Registry (GCR) and Google Artifact Registry (AR) for image authentication and digest resolution. Two authentication methods are available.
-
-#### Authentication Methods
-
-##### 1. Application Default Credentials (ADC) — Recommended
-
-ADC automatically finds credentials from the environment: `GOOGLE_APPLICATION_CREDENTIALS` env var, GCP metadata server (Compute Engine, GKE), or gcloud CLI default credentials. No additional configuration file is required — just set the registry type.
-
-**JSON config:**
-```json
-{
-  "registry": {
-    "type": "gcr",
-    "gcr": {
-      "auth": {
-        "method": "adc"
-      }
-    }
-  }
-}
-```
-
-**Environment variables:**
-```bash
-export DOCKENCILER_REGISTRY_TYPE="gcr"
-export DOCKENCILER_REGISTRY_GCR_AUTH_METHOD="adc"
-```
-
-##### 2. Service Account JSON Key
-
-Use a downloaded GCP service account key file for environments where ADC is unavailable.
-
-**JSON config:**
-```json
-{
-  "registry": {
-    "type": "gcr",
-    "gcr": {
-      "auth": {
-        "method": "service_account",
-        "service_account_file": "/etc/dockenciler/gcp-key.json"
-      }
-    }
-  }
-}
-```
-
-**Environment variables:**
-```bash
-export DOCKENCILER_REGISTRY_TYPE="gcr"
-export DOCKENCILER_REGISTRY_GCR_AUTH_METHOD="service_account"
-export DOCKENCILER_REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE="/etc/dockenciler/gcp-key.json"
-```
-
-#### Supported Hostnames
-
-| Hostname | Type |
-|----------|------|
-| `gcr.io` | Google Container Registry |
-| `*.gcr.io` | Regional GCR (e.g., `us.gcr.io`, `eu.gcr.io`, `asia.gcr.io`) |
-| `us-docker.pkg.dev` | Artifact Registry (US multi-region) |
-| `europe-docker.pkg.dev` | Artifact Registry (Europe multi-region) |
-| `asia-docker.pkg.dev` | Artifact Registry (Asia multi-region) |
-
-Any Artifact Registry repository in the `docker` format under `*.pkg.dev` domains is also supported.
+See the [Configuration Reference](docs/configuration.md) for the complete list of options with defaults, JSON structure, and environment variable mappings.
 
 ## 🔔 Notifications
 
-Dockenciler can send notifications when containers are updated. Notifications are configured via environment variables and multiple providers can be used simultaneously.
+Dockenciler can notify you when containers are updated via seven providers: Log (always active, stdout), Slack, Discord, Telegram, Email (SMTP), Microsoft Teams, and Google Chat. Multiple providers can be enabled simultaneously.
 
-### Supported Providers
+Templates use Go's `text/template` syntax. The available template fields are:
 
-| Provider | Environment Variable | Description |
-|----------|---------------------|-------------|
-| **Log** | Always enabled | Logs to stdout (always active) |
-| **Slack** | `DOCKENCILER_SLACK_WEBHOOK_URL` | Slack incoming webhook |
-| **Discord** | `DOCKENCILER_DISCORD_WEBHOOK_URL` | Discord webhook |
-| **Telegram** | `DOCKENCILER_TELEGRAM_BOT_TOKEN` + `DOCKENCILER_TELEGRAM_CHAT_ID` | Telegram bot |
-| **Email** | `DOCKENCILER_EMAIL_HOST`, `DOCKENCILER_EMAIL_PORT`, etc. | SMTP email |
-| **Microsoft Teams** | `DOCKENCILER_MSTEAMS_WEBHOOK_URL` | Teams incoming webhook |
-| **Google Chat** | `DOCKENCILER_GOOGLE_CHAT_WEBHOOK_URL` | Google Chat webhook |
+- `{{.ContainerID}}` — Container ID
+- `{{.ContainerName}}` — Container name (reserved, currently empty; reconciler does not populate)
+- `{{.Image}}` — Full image reference (e.g., `registry.example.com/repo:tag`)
+- `{{.OldDigest}}` — Previous image digest
+- `{{.NewDigest}}` — New image digest
+- `{{.Level}}` — Notification level (`info`, `warning`, `error`)
+- `{{.Timestamp}}` — Timestamp of the update (Go `time.Time`)
+- `{{.Location}}` — Timezone location
+- `{{.Subject}}` — Default subject line
+- `{{.Body}}` — Default body text
 
-### Slack Setup
+See [Notifications](docs/notifications.md) for provider setup guides, template customization, and the template priority cascade.
 
-1. Create a Slack app at https://api.slack.com/apps
-2. Enable "Incoming Webhooks" and create a webhook URL
-3. Add the webhook URL to your configuration:
+## 📄 Documentation
 
-```bash
-export DOCKENCILER_SLACK_WEBHOOK_URL="<your-slack-webhook-url>"
-```
-
-Or in `config.json`:
-```json
-{
-  "notifications": {
-    "slack_webhook_url": "<your-slack-webhook-url>"
-  }
-}
-}
-```
-
-### Discord Setup
-
-1. Go to Server Settings → Integrations → Webhooks
-2. Create a new webhook and copy the URL
-3. Add the webhook URL to your configuration:
-
-```bash
-export DOCKENCILER_DISCORD_WEBHOOK_URL="<your-discord-webhook-url>"
-```
-
-### Telegram Setup
-
-1. Create a bot via @BotFather on Telegram
-2. Get the bot token from BotFather
-3. Add the bot to your group/channel and get the chat ID
-4. Configure both values:
-
-```bash
-export DOCKENCILER_TELEGRAM_BOT_TOKEN="123456789:********"
-export DOCKENCILER_TELEGRAM_CHAT_ID="*****"
-```
-
-### Email (SMTP) Setup
-
-Configure your SMTP server details:
-
-```bash
-export DOCKENCILER_EMAIL_HOST="smtp.gmail.com"
-export DOCKENCILER_EMAIL_PORT="587"
-export DOCKENCILER_EMAIL_USER="your-email@gmail.com"
-export DOCKENCILER_EMAIL_PASSWORD="your-app-password"
-export DOCKENCILER_EMAIL_FROM="dockenciler@yourdomain.com"
-export DOCKENCILER_EMAIL_TO="alerts@yourdomain.com"
-```
-
-> **Note:** For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password.
-
-### Microsoft Teams Setup
-
-1. Go to your Teams channel → Connectors (or Workflows)
-2. Create an "Incoming Webhook" connector
-3. Copy the webhook URL:
-
-```bash
-export DOCKENCILER_MSTEAMS_WEBHOOK_URL="<your-msteams-webhook-url>"
-```
-
-### Google Chat Setup
-
-1. Open the space where you want to add the bot
-2. Click the down arrow → Manage webhooks
-3. Create a new webhook and copy the URL:
-
-```bash
-export DOCKENCILER_GOOGLE_CHAT_WEBHOOK_URL="<your-google-chat-webhook-url>"
-```
-
-### Example: Multiple Providers
-
-You can enable multiple providers at once:
-
-```bash
-export DOCKENCILER_SLACK_WEBHOOK_URL="<your-slack-webhook-url>"
-export DOCKENCILER_TELEGRAM_BOT_TOKEN="<your-telegram-bot-token>"
-export DOCKENCILER_TELEGRAM_CHAT_ID="<your-telegram-chat-id>"
-export DOCKENCILER_LOG_LEVEL="info"
-```
-
-Or in `config.json`:
-```json
-{
-  "notifications": {
-    "slack_webhook_url": "<your-slack-webhook-url>",
-    "telegram_bot_token": "<your-telegram-bot-token>",
-    "telegram_chat_id": "<your-telegram-chat-id>"
-  }
-}
-```
-
-### Notification Format
-
-When a container is updated, Dockenciler sends a notification with the following data fields available for templating:
-
-| Field | Description |
-|-------|-------------|
-| `{{.ContainerID}}` | The Docker container ID |
-| `{{.Image}}` | The full image reference (e.g., `myregistry.com/myapp:v1.2.3`) |
-| `{{.OldDigest}}` | The previous image digest |
-| `{{.NewDigest}}` | The new image digest |
-| `{{.Level}}` | Notification level (`info`, `warning`, `error`) |
-| `{{.Timestamp}}` | Time of the update (Go `time.Time`) |
-| `{{.Subject}}` | Default subject line |
-| `{{.Body}}` | Default body text |
-
-### Notification Templates
-
-Dockenciler supports customizable notification templates using Go's `text/template` syntax. You can override the default template globally or per-provider.
-
-#### Default Templates
-
-Each provider has a built-in default template. For example, the default template renders as:
-
-```
-Container abc123 updated
-Image: myregistry.com/myapp:v1.2.3
-Digest: sha256:old → sha256:new
-Level: info
-Time: 2025-01-15 10:30:00 UTC
-```
-
-#### Custom Templates
-
-Override the default template by setting the `templates` configuration:
-
-**Environment Variables:**
-
-```bash
-# Override all providers
-export DOCKENCILER_NOTIFICATIONS_TEMPLATES_DEFAULT='Container {{.ContainerID}} updated!\nImage: {{.Image}}\nOld: {{.OldDigest}}\nNew: {{.NewDigest}}'
-
-# Override a specific provider
-export DOCKENCILER_NOTIFICATIONS_TEMPLATES_SLACK='*{{.ContainerID}}* updated on {{.Image}}'
-export DOCKENCILER_NOTIFICATIONS_TEMPLATES_DISCORD='**{{.ContainerID}}** updated'
-export DOCKENCILER_NOTIFICATIONS_TEMPLATES_TELEGRAM='*{{.ContainerID}}* updated'
-export DOCKENCILER_NOTIFICATIONS_TEMPLATES_EMAIL='Container {{.ContainerID}} updated'
-export DOCKENCILER_NOTIFICATIONS_TEMPLATES_MSTEAMS='**{{.ContainerID}}** updated'
-export DOCKENCILER_NOTIFICATIONS_TEMPLATES_GOOGLE_CHAT='*{{.ContainerID}}* updated'
-```
-
-**config.json:**
-
-```json
-{
-  "notifications": {
-    "slack_webhook_url": "<your-slack-webhook-url>",
-    "templates": {
-      "default": "Container {{.ContainerID}} updated!\nImage: {{.Image}}\nOld: {{.OldDigest}}\nNew: {{.NewDigest}}",
-      "slack": "*{{.ContainerID}}* updated on {{.Image}}",
-      "discord": "**{{.ContainerID}}** updated",
-      "telegram": "*{{.ContainerID}}* updated",
-      "email": "Container {{.ContainerID}} updated",
-      "msteams": "**{{.ContainerID}}** updated",
-      "google_chat": "*{{.ContainerID}}* updated"
-    }
-  }
-}
-```
-
-#### Template Priority
-
-Per-provider templates take precedence over the `default` template. If a provider template is empty, the `default` template is used. If `default` is also empty, the built-in default template is used.
-
-**Priority order:** Provider-specific > `default` > Built-in default
-
-#### Template Examples
-
-**Slack with rich formatting:**
-```json
-{
-  "templates": {
-    "slack": ":white_check_mark: *Container {{.ContainerID}}* updated\n> Image: `{{.Image}}`\n> Old digest: `{{.OldDigest}}`\n> New digest: `{{.NewDigest}}`"
-  }
-}
-```
-
-**Email with structured body:**
-```json
-{
-  "templates": {
-    "email": "Container {{.ContainerID}} has been updated.\n\nImage:      {{.Image}}\nOld Digest: {{.OldDigest}}\nNew Digest: {{.NewDigest}}\nTimestamp:  {{.Timestamp.Format \"2006-01-02 15:04:05 UTC\"}}"
-  }
-}
-```
-
-**Minimal Telegram notification:**
-```json
-{
-  "templates": {
-    "telegram": "Updated: *{{.ContainerID}}* ({{.Image}})"
-  }
-}
-```
+| Topic | Description | Link |
+|---|---|---|
+| Getting Started | 5-minute quickstart guide | [docs/README.md](docs/README.md) |
+| Installation | Docker Compose, Swarm, binary, from-source | [docs/installation.md](docs/installation.md) |
+| Configuration | Full env var table, JSON schema, defaults | [docs/configuration.md](docs/configuration.md) |
+| ECR Provider | IAM keys, IMDSv2, region setup | [docs/providers/ecr.md](docs/providers/ecr.md) |
+| GCR / Artifact Registry | ADC, service account, supported hostnames | [docs/providers/gcr.md](docs/providers/gcr.md) |
+| Notifications | Provider setup, templates, field reference | [docs/notifications.md](docs/notifications.md) |
+| Security | Permissions, secrets, Docker socket hardening | [docs/security.md](docs/security.md) |
+| Operations & CI | Logs, dry-run, releases, CI pipeline | [docs/operations.md](docs/operations.md) |
+| Troubleshooting | FAQ, common errors, recovery | [docs/troubleshooting.md](docs/troubleshooting.md) |
+| Examples | JSON configuration samples | [docs/examples/README.md](docs/examples/README.md) |
 
 ## 📜 Versioning
 
-Dockenciler follows the [Semantic Versioning (SemVer)](https://semver.org/) standard: `MAJOR.MINOR.PATCH`.
-- `latest` tag always points to the most recent stable release.
+Releases are tagged per the [SemVer](https://semver.org/) convention; see [Operations & CI](docs/operations.md#releases--ci) for tag conventions and the multi-arch build pipeline. The runtime `--version` flag is not implemented; the binary reports a hardcoded value (see [Troubleshooting](docs/troubleshooting.md) for details).
 
 ## 📄 License
 

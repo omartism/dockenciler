@@ -1,16 +1,16 @@
 {
   "registry": {
     "type": "ecr",
-    "region": "us-east-1"
+    "ecr": {
+      "region": "eu-west-1",
+      "access_key": "YOUR_AWS_ACCESS_KEY_ID",
+      "secret_key": "YOUR_AWS_SECRET_ACCESS_KEY"
+    }
   },
   "docker": {
-    "socket_path": "/var/run/docker.sock",
-    "label_filter": "dockenciler.autoupdate=true"
+    "socket_path": "/var/run/docker.sock"
   },
-  "reconcile_interval": "15m",
-  "log_level": "info",
-  "criteria": {
-    "version": "latest"
-  },
-  "dry_run": false
+  "notifications": {
+    "slack_webhook_url": "https://hooks.slack.com/services/your-webhook-url"
+  }
 }

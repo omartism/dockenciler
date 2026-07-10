@@ -3,6 +3,7 @@ services:
     build: .
     container_name: dockenciler
     restart: unless-stopped
+    command: ["/home/dockenciler/config.json"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.json:/home/dockenciler/config.json:ro
