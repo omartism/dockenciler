@@ -4,6 +4,7 @@ Dockenciler is a lightweight and efficient open-source Docker reconciler written
 
 ## 🚀 Features
 
+- 🎉 **Docker image under 50MB!** Built with a multi-stage build (golang:1.26-alpine → distroless/static-debian12).
 - **Flexible Image Matching**: Update containers based on the `latest` tag, specific version numbers, or custom regular expressions.
 - **Smart Filtering**: Update all containers by default, or target specific containers using the label `dockenciler.autoupdate=true` (customizable via `docker.label_filter`).
 - **Update Strategies**: In-place container recreation (default) or rolling updates in Docker Swarm mode for minimized downtime.
