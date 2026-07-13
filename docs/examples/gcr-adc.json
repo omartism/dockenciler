@@ -1,0 +1,10 @@
+{
+  "registry": {
+    "type": "gcr",
+    "gcr": {
+      "auth": {
+        "method": "adc"
+      }
+    }
+  }
+}

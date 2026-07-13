@@ -1,16 +1,14 @@
 {
   "registry": {
     "type": "ecr",
-    "region": "us-east-1"
+    "ecr": {
+      "region": "ap-southeast-2",
+      "access_key": "YOUR_AWS_ACCESS_KEY_ID",
+      "secret_key": "YOUR_AWS_SECRET_ACCESS_KEY"
+    }
   },
-  "docker": {
-    "socket_path": "/var/run/docker.sock",
-    "label_filter": "dockenciler.autoupdate=true"
-  },
-  "reconcile_interval": "1h",
-  "log_level": "debug",
   "criteria": {
-    "regex": "^v\\d+\\.\\d+\\.\\d+$"
+    "version": "1.2.3"
   },
-  "dry_run": true
+  "exclusions": ["abc123def456", "789ghi012jkl"]
 }

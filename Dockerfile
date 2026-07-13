@@ -20,7 +20,7 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg/mod CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o dockenciler ./cmd/dockenciler
 
 # Final stage
-FROM gcr.io/distroless/static-debian12:latest
+FROM gcr.io/distroless/static-debian13:latest
 
 # Set working directory
 WORKDIR /
@@ -29,11 +29,11 @@ WORKDIR /
 COPY --from=builder /app/dockenciler /dockenciler
 
 # Default environment variables
-ENV DOCKENCILER_LOG_LEVEL=info \
-    DOCKENCILER_RECONCILE_INTERVAL=5m \
-    DOCKENCILER_DOCKER_SOCKET_PATH=/var/run/docker.sock \
-    DOCKENCILER_DOCKER_LABEL_FILTER=dockenciler.autoupdate=true \
-    DOCKENCILER_DRY_RUN=false
+ENV LOG_LEVEL=info \
+    RECONCILE_INTERVAL=5m \
+    DOCKER_SOCKET_PATH=/var/run/docker.sock \
+    DOCKER_LABEL_FILTER=dockenciler.autoupdate=true \
+    DRY_RUN=false
 
 # Healthcheck to ensure the process is running
 HEALTHCHECK --interval=30s --timeout=3s \

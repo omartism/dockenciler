@@ -63,6 +63,9 @@ func main() {
 			os.Exit(1)
 		}
 		reg = gcrProvider
+	case "dockerhub":
+		reg = registry.NewDockerHubProvider(&http.Client{Timeout: 30 * time.Second})
+		slog.Info("Docker Hub registry provider initialized (anonymous access)")
 	default:
 		slog.Error("Unsupported registry type", "type", cfg.Registry.Type)
 		os.Exit(1)

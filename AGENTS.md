@@ -5,7 +5,7 @@ Lightweight Docker reconciler that watches labeled containers and recreates them
 ## House rules
 - **Update `README.md`** whenever you change user-facing config, env vars, CLI flags, or behavior.
 - **Update `.env.example`** alongside `README.md` for any new env var.
-- `make test` does **not** include `-race`. CI does (see `ci.md` below). When debugging concurrency, run `go test -race ./...` yourself.
+- `make test` does **not** include `-race`. CI does (see `## CI/CD` below). When debugging concurrency, run `go test -race ./...` yourself.
 - The binary is committed in some branches by accident — don't `git add dockenciler` unless you mean to. `.gitignore` does not list it.
 
 ## Quick reference
@@ -23,9 +23,9 @@ Lightweight Docker reconciler that watches labeled containers and recreates them
 
 ## Architecture
 - **Entrypoint**: `cmd/dockenciler/main.go` — signal setup → config → logging → Docker client → registry → notifier → reconciler → ticker loop.
-- **`pkg/config`** — Viper-based loader. JSON file + `DOCKENCILER_*` env vars (env wins). Nested struct: `Registry{Type, ECR, GCR}` with peer `ECRConfig`/`GCRConfig`; see `ResolveTimezone()` for tz handling.
-- **`pkg/registry`** — Provider interface (`GetLatestDigest`, `GetImageVersion`, `GetAuth`, `InvalidateCache`). `Auth{Username, Password, RegistryHost, AuthHeader}` carries full auth tuple. Providers:
-  - `ecr.go` — AWS SDK v2; IMDSv2 instance role supported (see `imds.go`).
+- **`pkg/config`** — Viper-based loader. JSON file + env vars (env wins). Nested struct: `Registry{Type, ECR, GCR}` with peer `ECRConfig`/`GCRConfig`; see `ResolveTimezone()` for tz handling.
+- **`pkg/registry`** — Provider interface (`GetLatestDigest`, `GetImageVersion`, `GetAuth`, `InvalidateCache`). `Auth{Username, Password, RegistryHost}` carries the auth tuple. Providers:
+  - `ecr.go` — AWS SDK v2; IMDSv2 instance role supported via the AWS SDK's default credential chain (`cmd/dockenciler/main.go:133`, `awscfg.LoadDefaultConfig`). `imds.go` is a standalone reference implementation (used only by `imds_test.go`).
   - `gcr.go` — Docker Registry v2 HTTP API (`HEAD /v2/<path>/manifests/<tag>`); no AR/gcloud SDK. Token cache uses `golang.org/x/oauth2` `TokenSource` with 5-min buffer.
 - **`pkg/reconciler`** — Core loop. Only call site for `Registry.GetAuth` + `DockerClient.Authenticate` (see `reconciler.go` near `reconcileContainer`).
 - **`pkg/docker`** — Engine API wrapper. `Authenticate(ctx, username, password, registryHost)` — username is **not** hardcoded to "AWS" anymore.
@@ -35,7 +35,7 @@ Lightweight Docker reconciler that watches labeled containers and recreates them
 ### Config loading order
 1. Defaults via `v.SetDefault()` (see `pkg/config/config.go`)
 2. JSON config file (optional, path from CLI arg)
-3. `DOCKENCILER_*` env vars (override everything — note `.` → `_` in nested keys)
+3. Env vars (no prefix; override everything — note `.` → `_` in nested keys)
 
 ### Adding a new registry provider
 1. Implement the `Registry` interface in `pkg/registry/<name>.go` (all four methods).
@@ -56,12 +56,12 @@ Image refs are parsed **inside each provider**, not via a shared helper. ECR str
 - Token sources and HTTP clients in `GCRProvider` are interface-typed and injectable; tests should never need real GCP credentials.
 
 ## Notification template fields
-`{{.ContainerID}}`, `{{.Image}}`, `{{.OldDigest}}`, `{{.NewDigest}}`, `{{.Level}}`, `{{.Timestamp}}`, `{{.Location}}`, `{{.Subject}}`, `{{.Body}}`
+`{{.ContainerID}}`, `{{.ContainerName}}` (reserved, currently empty), `{{.Image}}`, `{{.OldDigest}}`, `{{.NewDigest}}`, `{{.Level}}`, `{{.Timestamp}}`, `{{.Location}}`, `{{.Subject}}`, `{{.Body}}`
 
 ## Operational gotchas
 - **Permissions**: Needs `/var/run/docker.sock`. Container runs as root by default; non-root needs `docker` group.
 - **Self-update**: Skips containers labeled `dockenciler.instance=true`. Don't drop this label from the docs example.
-- **GCR supported hostnames**: `gcr.io`, `*.gcr.io` (e.g. `us.gcr.io`), `*-docker.pkg.dev` (e.g. `us-docker.pkg.dev`). Reject anything else.
+- **GCR supported hostnames**: `gcr.io`, `*.gcr.io` (e.g. `us.gcr.io`), `*-docker.pkg.dev` (e.g. `us-docker.pkg.dev`). Conventionally supported; the parser accepts other hostnames but Docker pulls will fail.
 - **GCR auth**:
   - `adc` (default) — `google.DefaultTokenSource`. Picks up `GOOGLE_APPLICATION_CREDENTIALS`, GCE/GKE metadata, `gcloud auth application-default login`. Zero config.
   - `service_account` — JSON key file path only. Path is `filepath.Clean`-ed and `..` is rejected. Do not accept embedded JSON in env/config.

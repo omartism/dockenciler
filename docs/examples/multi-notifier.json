@@ -1,0 +1,26 @@
+{
+  "registry": {
+    "type": "ecr",
+    "ecr": {
+      "region": "us-east-1",
+      "access_key": "YOUR_AWS_ACCESS_KEY_ID",
+      "secret_key": "YOUR_AWS_SECRET_ACCESS_KEY"
+    }
+  },
+  "notifications": {
+    "slack_webhook_url": "https://hooks.slack.com/services/your-webhook-url",
+    "telegram_bot_token": "your-telegram-bot-token",
+    "telegram_chat_id": "123456789",
+    "email_host": "smtp.example.com",
+    "email_port": "587",
+    "email_user": "alerts@example.com",
+    "email_password": "replace-with-real-password",
+    "email_from": "alerts@example.com",
+    "email_to": "ops@example.com",
+    "templates": {
+      "slack": "*{{.Subject}}*\nImage: {{.Image}}\nUpdated: {{.NewDigest}}",
+      "telegram": "*{{.Subject}}*\nImage: {{.Image}}\nNew digest: {{.NewDigest}}",
+      "email": "Subject: {{.Subject}}\n\nImage: {{.Image}}\nOld digest: {{.OldDigest}}\nNew digest: {{.NewDigest}}"
+    }
+  }
+}

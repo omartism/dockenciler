@@ -295,6 +295,12 @@ func (d *DockerClientImpl) Authenticate(ctx context.Context, username, password,
 	d.lastAuthConfig = &authConfig
 	d.mu.Unlock()
 
+	// Skip RegistryLogin for anonymous access (no credentials).
+	// This allows public Docker Hub images to be pulled without authentication.
+	if username == "" && password == "" {
+		return nil
+	}
+
 	_, err := d.client.RegistryLogin(ctx, authConfig)
 	return err
 }

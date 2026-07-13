@@ -8,3 +8,7 @@ vendor/
 .dockerignore
 Dockerfile
 docker-compose.yml
+AGENTS.md
+.trivyignore
+README.md
+

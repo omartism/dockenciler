@@ -2,7 +2,11 @@ package config
 
 import (
     "encoding/json"
+    "os"
+    "path/filepath"
     "testing"
+
+    "github.com/stretchr/testify/assert"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -169,6 +173,83 @@ func TestSetupLogging(t *testing.T) {
     
     // Test with empty level (should default to info)
     SetupLogging("", false)
+}
+
+// TestExampleConfigs validates every docs/examples/*.json file by loading each
+// into the Config struct. This catches schema drift between documentation
+// examples and the real config schema.
+//
+// Phase 3 of the docs revamp.
+func TestExampleConfigs(t *testing.T) {
+	type expectation struct {
+		file          string
+		registryType  string
+		needsECR      bool
+		needsGCR      bool
+	}
+	expectations := []expectation{
+		{file: "ecr-basic.json", registryType: "ecr", needsECR: true},
+		{file: "ecr-imds.json", registryType: "ecr", needsECR: true},
+		{file: "swarm-rolling.json", registryType: "ecr", needsECR: true},
+		{file: "advanced-matching.json", registryType: "ecr", needsECR: true},
+		{file: "gcr-adc.json", registryType: "gcr", needsGCR: true},
+		{file: "gcr-service-account.json", registryType: "gcr", needsGCR: true},
+		{file: "multi-notifier.json", registryType: "ecr", needsECR: true},
+		{file: "dry-run.json", registryType: "ecr", needsECR: true},
+	}
+
+	for _, exp := range expectations {
+		t.Run(exp.file, func(t *testing.T) {
+			path := filepath.Join("..", "..", "docs", "examples", exp.file)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read example %s: %v", exp.file, err)
+			}
+
+			var cfg Config
+			if err := json.Unmarshal(data, &cfg); err != nil {
+				t.Fatalf("unmarshal %s into Config: %v", exp.file, err)
+			}
+
+			assert.Equal(t, exp.registryType, cfg.Registry.Type, "registry.type mismatch in %s", exp.file)
+
+			if exp.needsECR {
+				assert.NotNil(t, cfg.Registry.ECR, "registry.ecr must be non-nil for %s", exp.file)
+			} else {
+				assert.Nil(t, cfg.Registry.ECR, "registry.ecr must be nil for %s", exp.file)
+			}
+
+			if exp.needsGCR {
+				assert.NotNil(t, cfg.Registry.GCR, "registry.gcr must be non-nil for %s", exp.file)
+			} else {
+				assert.Nil(t, cfg.Registry.GCR, "registry.gcr must be nil for %s", exp.file)
+			}
+
+			// Per-file value assertions — each example must demonstrate its claimed feature.
+			switch exp.file {
+			case "ecr-imds.json":
+				assert.Empty(t, cfg.Registry.ECR.AccessKey, "IMDSv2 example should not have access_key")
+				assert.Empty(t, cfg.Registry.ECR.SecretKey, "IMDSv2 example should not have secret_key")
+			case "gcr-adc.json":
+				assert.Equal(t, "adc", cfg.Registry.GCR.Auth.Method, "GCR ADC example should use method=adc")
+				assert.Empty(t, cfg.Registry.GCR.Auth.ServiceAccountFile, "GCR ADC example should not have service_account_file")
+			case "gcr-service-account.json":
+				assert.Equal(t, "service_account", cfg.Registry.GCR.Auth.Method)
+				assert.NotEmpty(t, cfg.Registry.GCR.Auth.ServiceAccountFile, "GCR service-account example must include service_account_file path")
+			case "advanced-matching.json":
+				assert.NotEmpty(t, cfg.Criteria.Version, "advanced-matching example must set criteria.version")
+				assert.Equal(t, 2, len(cfg.Exclusions), "advanced-matching example must have 2 exclusion entries")
+			case "multi-notifier.json":
+				assert.NotEmpty(t, cfg.Notifications.SlackWebhookURL, "multi-notifier example must set slack_webhook_url")
+				assert.NotEmpty(t, cfg.Notifications.TelegramBotToken, "multi-notifier example must set telegram_bot_token")
+				assert.NotEmpty(t, cfg.Notifications.EmailHost, "multi-notifier example must set email_host")
+			case "dry-run.json":
+				assert.True(t, cfg.DryRun, "dry-run example must set dry_run=true")
+			case "swarm-rolling.json":
+				assert.NotEmpty(t, cfg.Notifications.SlackWebhookURL, "swarm-rolling example must set slack_webhook_url")
+			}
+		})
+	}
 }
 
 // Helper function to load config from string (for testing)

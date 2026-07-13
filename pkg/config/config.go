@@ -26,10 +26,13 @@ type GCRConfig struct {
 	Auth GCRAuth `json:"auth" mapstructure:"auth"`
 }
 
+type DockerHubConfig struct{}
+
 type Registry struct {
-	Type string      `json:"type" mapstructure:"type"` // "ecr" | "gcr"
-	ECR  *ECRConfig  `json:"ecr,omitempty" mapstructure:"ecr"`
-	GCR  *GCRConfig  `json:"gcr,omitempty" mapstructure:"gcr"`
+	Type      string           `json:"type" mapstructure:"type"` // "ecr" | "gcr" | "dockerhub"
+	ECR       *ECRConfig       `json:"ecr,omitempty" mapstructure:"ecr"`
+	GCR       *GCRConfig       `json:"gcr,omitempty" mapstructure:"gcr"`
+	DockerHub *DockerHubConfig `json:"dockerhub,omitempty" mapstructure:"dockerhub"`
 }
 
 type Docker struct {
@@ -90,8 +93,8 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetConfigFile(path)
 	v.SetConfigType("json")
 
-	// Enable environment variable overrides with DOCKENCILER prefix
-	v.SetEnvPrefix("DOCKENCILER")
+	// Enable environment variable overrides (no prefix)
+	v.SetEnvPrefix("")
 	v.AutomaticEnv()
 
 	// Set defaults so AutomaticEnv knows which keys to look for
@@ -99,6 +102,7 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetDefault("registry.ecr.region", "")
 	v.SetDefault("registry.ecr.access_key", "")
 	v.SetDefault("registry.ecr.secret_key", "")
+	v.SetDefault("registry.dockerhub", map[string]interface{}{})
 	v.SetDefault("registry.gcr.auth.method", "adc")
 	v.SetDefault("registry.gcr.auth.service_account_file", "")
 	v.SetDefault("docker.socket_path", "/var/run/docker.sock")
