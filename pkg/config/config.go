@@ -26,7 +26,11 @@ type GCRConfig struct {
 	Auth GCRAuth `json:"auth" mapstructure:"auth"`
 }
 
-type DockerHubConfig struct{}
+type DockerHubConfig struct {
+	Username   string `json:"username" mapstructure:"username"`
+	Password   string `json:"password" mapstructure:"password"`
+	ConfigPath string `json:"config_path" mapstructure:"config_path"`
+}
 
 type Registry struct {
 	Type      string           `json:"type" mapstructure:"type"` // "ecr" | "gcr" | "dockerhub"
@@ -102,7 +106,9 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetDefault("registry.ecr.region", "")
 	v.SetDefault("registry.ecr.access_key", "")
 	v.SetDefault("registry.ecr.secret_key", "")
-	v.SetDefault("registry.dockerhub", map[string]interface{}{})
+	v.SetDefault("registry.dockerhub.username", "")
+	v.SetDefault("registry.dockerhub.password", "")
+	v.SetDefault("registry.dockerhub.config_path", "")
 	v.SetDefault("registry.gcr.auth.method", "adc")
 	v.SetDefault("registry.gcr.auth.service_account_file", "")
 	v.SetDefault("docker.socket_path", "/var/run/docker.sock")

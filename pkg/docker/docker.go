@@ -392,7 +392,7 @@ func portBindingsToStrings(bindings map[nat.Port][]nat.PortBinding) []string {
 	result := make([]string, 0, len(bindings))
 	for port, binds := range bindings {
 		for _, b := range binds {
-			result = append(result, fmt.Sprintf("%s:%s", port.Port(), b.HostIP+":"+b.HostPort))
+			result = append(result, fmt.Sprintf("%s:%s", string(port), b.HostIP+":"+b.HostPort))
 		}
 	}
 	return result
@@ -460,10 +460,19 @@ func parsePortBindings(s []string) nat.PortMap {
 	result := make(nat.PortMap)
 	for _, b := range s {
 		parts := strings.Split(b, ":")
-		if len(parts) >= 2 {
-			port := nat.Port(parts[0])
-			result[port] = []nat.PortBinding{{HostPort: parts[1]}}
+		var pb nat.PortBinding
+		switch len(parts) {
+		case 2:
+			// format: "port/proto:hostPort" or "port:hostPort"
+			pb = nat.PortBinding{HostPort: parts[1]}
+		case 3:
+			// format: "port/proto:hostIP:hostPort" or "port:hostIP:hostPort"
+			pb = nat.PortBinding{HostIP: parts[1], HostPort: parts[2]}
+		default:
+			continue
 		}
+		port := nat.Port(parts[0])
+		result[port] = []nat.PortBinding{pb}
 	}
 	return result
 }

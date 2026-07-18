@@ -8,7 +8,7 @@ Dockenciler is a lightweight and efficient open-source Docker reconciler written
 - **Flexible Image Matching**: Update containers based on the `latest` tag, specific version numbers, or custom regular expressions.
 - **Smart Filtering**: Update all containers by default, or target specific containers using the label `dockenciler.autoupdate=true` (customizable via `docker.label_filter`).
 - **Update Strategies**: In-place container recreation (default) or rolling updates in Docker Swarm mode for minimized downtime.
-- **Secure Authentication**: AWS ECR (IAM access keys or IMDSv2 instance role), GCR / Artifact Registry (ADC or service account JSON key), and Docker Hub (anonymous access for public images).
+- **Secure Authentication**: AWS ECR (IAM access keys or IMDSv2 instance role), GCR / Artifact Registry (ADC or service account JSON key), and Docker Hub (anonymous or username/password/pat for public and private images).
 - **Extensive Notifications**: Email, Slack, MS Teams, Google Chat, Telegram, Discord, and local logs — all with customizable Go `text/template` templates.
 - **Safety Rails**: Dry-run mode, self-update exclusion via `dockenciler.instance=true` label, and configurable exclusion lists.
 - **Multiple Configuration Sources**: JSON config file, environment variables (env vars override file), and sensible defaults.
@@ -105,14 +105,49 @@ No ECR-related env vars are needed. The `adc` method (default) picks up `GOOGLE_
 ```json
 {
   "registry": {
-    "type": "dockerhub"
+    "type": "dockerhub",
+    "dockerhub": {
+      "username": "",
+      "password": "",
+      "config_path": ""
+    }
   },
   "reconcile_interval": "30m",
   "log_level": "info"
 }
 ```
 
-No credentials are required for public images. Dockenciler obtains anonymous bearer tokens for registry API queries and the Docker daemon handles pulls without authentication. Add `dockenciler.autoupdate=true` as a label on any container running a public Docker Hub image to start automatic updates.
+Optional credentials (username and password or personal access token) enable authenticated access for both registry API queries and Docker daemon pulls. When left empty, anonymous access is used for public images.
+
+Alternatively, set `config_path` to the path of a Docker CLI `config.json` file (e.g., `~/.docker/config.json`). When `username` is empty and `config_path` is set, credentials are read from the file as a fallback. This is useful when you already have `docker login` configured on the host.
+
+Dockenciler obtains bearer tokens from `auth.docker.io` for registry API calls. When credentials are provided, they are sent as HTTP Basic auth on the token request, enabling access to private repositories and avoiding Docker Hub rate limits on anonymous access.
+
+Place secrets in `.env` (copy from `.env.example`):
+
+```bash
+REGISTRY_DOCKERHUB_USERNAME=your_dockerhub_username
+REGISTRY_DOCKERHUB_PASSWORD=your_dockerhub_pat_or_password
+# Or mount the Docker CLI config.json:
+# volumes:
+#   - ~/.docker/config.json:/docker-config.json:ro
+# REGISTRY_DOCKERHUB_CONFIG_PATH=/docker-config.json
+```
+
+When using `config_path`, mount the host's Docker config file into the container and point `config_path` to the mounted location:
+
+```yaml
+services:
+  dockenciler:
+    # ...
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.docker/config.json:/docker-config.json:ro
+    environment:
+      REGISTRY_DOCKERHUB_CONFIG_PATH: /docker-config.json
+```
+
+Add `dockenciler.autoupdate=true` as a label on any container running a Docker Hub image to start automatic updates.
 
 Supported image reference formats:
 - `postgres:18-alpine` (official image, auto-prefixed with `library/`)
@@ -120,7 +155,7 @@ Supported image reference formats:
 - `myuser/myimage:tag` (user/organization repository)
 - `docker.io/library/postgres:18-alpine` (fully-qualified)
 
-> **Note:** Private Docker Hub repositories are not yet supported. The provider only works with publicly accessible images.
+> **Note:** Private Docker Hub repositories are now supported when credentials are configured. If you leave credentials empty, only publicly accessible images can be updated.
 
 Start the container:
 
@@ -215,7 +250,7 @@ See [Notifications](docs/notifications.md) for provider setup guides, template c
 | Configuration | Full env var table, JSON schema, defaults | [docs/configuration.md](docs/configuration.md) |
 | ECR Provider | IAM keys, IMDSv2, region setup | [docs/providers/ecr.md](docs/providers/ecr.md) |
 | GCR / Artifact Registry | ADC, service account, supported hostnames | [docs/providers/gcr.md](docs/providers/gcr.md) |
-| Docker Hub Provider | Public image support, anonymous access | [docs/providers/dockerhub.md](docs/providers/dockerhub.md) |
+| Docker Hub Provider | Public and private image support, anonymous or authenticated access | [docs/providers/dockerhub.md](docs/providers/dockerhub.md) |
 | Notifications | Provider setup, templates, field reference | [docs/notifications.md](docs/notifications.md) |
 | Security | Permissions, secrets, Docker socket hardening | [docs/security.md](docs/security.md) |
 | Operations & CI | Logs, dry-run, releases, CI pipeline | [docs/operations.md](docs/operations.md) |

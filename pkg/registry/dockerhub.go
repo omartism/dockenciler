@@ -2,9 +2,11 @@ package registry
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -15,9 +17,11 @@ import (
 // DockerHubProvider implements the Registry interface for Docker Hub
 // (registry-1.docker.io) using the Docker Registry HTTP API v2.
 //
-// Public images require no credentials — the provider obtains an anonymous
-// bearer token from auth.docker.io for registry API calls. For private
-// repositories, auth is not yet supported.
+// Public images can be accessed anonymously — the provider obtains a bearer
+// token from auth.docker.io for registry API calls. When credentials are
+// configured (explicit username/password or via a Docker CLI config.json
+// file), they are used for authenticated registry API calls and Docker
+// daemon pulls, supporting both public and private repositories.
 //
 // Supported image reference formats:
 //   - postgres:18-alpine          → registry-1.docker.io/library/postgres:18-alpine
@@ -26,6 +30,7 @@ import (
 //   - docker.io/library/postgres:18-alpine → uses docker.io as host, mapped to registry-1.docker.io
 type DockerHubProvider struct {
 	httpClient  *http.Client
+	cfg         DockerHubConfig
 	mu          sync.Mutex
 	cachedToken string
 	tokenExpiry time.Time
@@ -35,19 +40,44 @@ type DockerHubProvider struct {
 }
 
 // DockerHubConfig is the subset of config needed by the provider.
-// Currently empty (public images need no config), but reserved for future
-// private registry auth support.
-type DockerHubConfig struct{}
+// Username and Password are optional; when empty, anonymous access is used.
+// When Username is empty and ConfigPath is set, credentials are read from the
+// Docker CLI config.json file as a fallback.
+type DockerHubConfig struct {
+	Username   string // Docker Hub username (leave empty for anonymous access)
+	Password   string // Docker Hub password or personal access token
+	ConfigPath string // Path to Docker CLI config.json (e.g., ~/.docker/config.json)
+}
 
 // NewDockerHubProvider creates a new DockerHubProvider.
 // httpClient may be nil (uses http.DefaultClient with 30s timeout).
-func NewDockerHubProvider(httpClient *http.Client) *DockerHubProvider {
+// cfg may be zero-valued (DockerHubConfig{}) for anonymous access.
+// When Username is empty and ConfigPath is set, credentials are resolved
+// from the Docker CLI config.json file.
+func NewDockerHubProvider(httpClient *http.Client, cfg DockerHubConfig) *DockerHubProvider {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
+	cfg = resolveCredentials(cfg)
 	return &DockerHubProvider{
 		httpClient: httpClient,
+		cfg:        cfg,
 	}
+}
+
+// resolveCredentials reads Docker Hub credentials from the Docker CLI
+// config.json when explicit credentials are not provided.
+func resolveCredentials(cfg DockerHubConfig) DockerHubConfig {
+	if cfg.Username != "" || cfg.ConfigPath == "" {
+		return cfg
+	}
+	username, password, err := readDockerConfigAuth(cfg.ConfigPath)
+	if err != nil {
+		return cfg
+	}
+	cfg.Username = username
+	cfg.Password = password
+	return cfg
 }
 
 // setBaseURLForTest overrides the base URL used for registry requests.
@@ -88,8 +118,9 @@ func (p *DockerHubProvider) InvalidateCache() {
 	p.tokenExpiry = time.Time{}
 }
 
-// GetAuth returns Docker auth credentials. For Docker Hub public images,
-// no credentials are required — the Docker daemon handles anonymous pulls.
+// GetAuth returns Docker auth credentials. When credentials are configured,
+// they are returned for Docker daemon pulls. For anonymous access, empty
+// credentials are returned and the Docker daemon handles anonymous pulls.
 func (p *DockerHubProvider) GetAuth(ctx context.Context) (Auth, error) {
 	p.mu.Lock()
 	host := p.cachedHost
@@ -100,6 +131,8 @@ func (p *DockerHubProvider) GetAuth(ctx context.Context) (Auth, error) {
 
 	return Auth{
 		RegistryHost: host,
+		Username:     p.cfg.Username,
+		Password:     p.cfg.Password,
 	}, nil
 }
 
@@ -234,6 +267,10 @@ func (p *DockerHubProvider) fetchToken(ctx context.Context, repoPath string) (st
 		return "", fmt.Errorf("failed to create token request: %w", err)
 	}
 
+	if p.cfg.Username != "" {
+		req.SetBasicAuth(p.cfg.Username, p.cfg.Password)
+	}
+
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch Docker Hub token: %w", err)
@@ -339,6 +376,53 @@ func (p *DockerHubProvider) listTags(ctx context.Context, host, repoPath string)
 		return nil, fmt.Errorf("failed to decode tags response: %w", err)
 	}
 	return result.Tags, nil
+}
+
+// --------------------------------------------------------------------------
+// Docker CLI config.json credential resolution
+// --------------------------------------------------------------------------
+
+// dockerHubAuthHosts lists the registry hosts Docker stores credentials under
+// for Docker Hub in the CLI config.json.
+var dockerHubAuthHosts = []string{
+	"https://index.docker.io/v1/",
+	"registry-1.docker.io",
+}
+
+// dockerConfigJSON is the minimal structure for parsing ~/.docker/config.json.
+type dockerConfigJSON struct {
+	Auths map[string]struct {
+		Auth string `json:"auth"`
+	} `json:"auths"`
+}
+
+// readDockerConfigAuth reads a Docker CLI config.json file and extracts
+// username and password for Docker Hub registry hosts.
+// The "auth" field is a base64-encoded "username:password" string.
+func readDockerConfigAuth(configPath string) (username, password string, err error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return "", "", fmt.Errorf("could not read docker config %s: %w", configPath, err)
+	}
+	var cfg dockerConfigJSON
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return "", "", fmt.Errorf("could not parse docker config %s: %w", configPath, err)
+	}
+	for _, host := range dockerHubAuthHosts {
+		entry, ok := cfg.Auths[host]
+		if !ok || entry.Auth == "" {
+			continue
+		}
+		decoded, err := base64.StdEncoding.DecodeString(entry.Auth)
+		if err != nil {
+			continue
+		}
+		parts := strings.SplitN(string(decoded), ":", 2)
+		if len(parts) == 2 && parts[0] != "" {
+			return parts[0], parts[1], nil
+		}
+	}
+	return "", "", fmt.Errorf("no Docker Hub credentials found in %s", configPath)
 }
 
 // --------------------------------------------------------------------------

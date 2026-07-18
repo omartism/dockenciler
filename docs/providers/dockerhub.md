@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Docker Hub provider uses the **Docker Registry HTTP API v2** to interact with Docker Hub (`registry-1.docker.io`). It obtains **anonymous bearer tokens** from `auth.docker.io` for registry API queries — no Docker Hub account credentials are required.
+The Docker Hub provider uses the **Docker Registry HTTP API v2** to interact with Docker Hub (`registry-1.docker.io`). It obtains **bearer tokens** from `auth.docker.io` for registry API queries. When credentials are configured (username and password or personal access token), they are sent as HTTP Basic auth on the token request, enabling authenticated access to public and private repositories. Without credentials, anonymous bearer tokens are used for public images only.
 
-Public images are pulled by the Docker daemon without authentication, so the provider returns empty credentials from `GetAuth`. The `Authenticate` step in the reconciler is a no-op for anonymous access (`pkg/docker/docker.go:282-299`).
+When credentials are configured, the provider returns them from `GetAuth` so the Docker daemon can authenticate pulls (`pkg/docker/docker.go:282-299`). For anonymous access, empty credentials are returned and the Docker daemon handles anonymous pulls.
 
 The source is in `pkg/registry/dockerhub.go`.
 
@@ -31,29 +31,33 @@ The parsing logic (`dockerHubParseRef` at `pkg/registry/dockerhub.go`):
 
 ## Configuration
 
-The Docker Hub provider requires **no credentials** for public images. Minimal configuration:
+The Docker Hub provider requires no credentials for public images. For authenticated access (private repositories or to avoid rate limits), provide a Docker Hub username and password or personal access token.
 
 ### JSON config
 
 ```json
 {
   "registry": {
-    "type": "dockerhub"
+    "type": "dockerhub",
+    "dockerhub": {
+      "username": "",
+      "password": ""
+    }
   }
 }
 ```
 
-No additional `dockerhub` config block is required.
+Leave `username` and `password` empty for anonymous public image access.
 
 ### Environment variables
 
 | Variable | Description | Default |
 |---|---|---|
 | `REGISTRY_TYPE` | Set to `dockerhub` | `""` |
+| `REGISTRY_DOCKERHUB_USERNAME` | Docker Hub username (leave empty for anonymous) | `""` |
+| `REGISTRY_DOCKERHUB_PASSWORD` | Docker Hub password or personal access token | `""` |
 
-No other env vars are needed.
-
-> **Note:** Private Docker Hub repositories are not yet supported. If you need private repository access, use ECR or GCR instead.
+> **Note:** Private Docker Hub repositories are supported when credentials are configured. Without credentials, only public images can be updated.
 
 ## Digest resolution
 
@@ -77,13 +81,16 @@ The response `Docker-Content-Digest` header provides the current digest.
 
 ## Authentication flow
 
-### Anonymous token acquisition
+### Token acquisition
 
-Docker Hub issues anonymous bearer tokens for public repositories via its auth service:
+Docker Hub issues bearer tokens via its auth service. When credentials are configured, the token request includes HTTP Basic authentication:
 
 ```
 GET https://auth.docker.io/token?service=registry.docker.io&scope=repository:<repo>:pull
+Authorization: Basic base64(username:password)
 ```
+
+Without credentials, anonymous token requests are sent (same endpoint, no Authorization header).
 
 The response is a JSON object:
 
@@ -99,7 +106,7 @@ The token is cached and reused until 1 minute before expiry (`pkg/registry/docke
 
 ### Docker daemon authentication
 
-For public images, the Docker daemon does not require credentials to pull. The provider therefore returns empty username and password fields from `GetAuth`. The reconciler's `Authenticate` call is a no-op for empty credentials — it stores the server address but skips `RegistryLogin`.
+When credentials are configured, the provider returns them from `GetAuth` so the Docker daemon can authenticate pulls. For anonymous access, empty credentials are returned — the `Authenticate` call is a no-op that stores the server address but skips `RegistryLogin`.
 
 ## API surface
 
@@ -109,12 +116,12 @@ The provider implements the full `Registry` interface (`pkg/registry/registry.go
 |---|---|
 | `GetLatestDigest` | Resolve the current digest for an image reference |
 | `GetImageVersion` | Extract the tag from the image reference |
-| `GetAuth` | Return auth credentials (empty for public access) |
+| `GetAuth` | Return auth credentials (username/password when configured, empty for anonymous) |
 | `InvalidateCache` | Clear the cached anonymous token |
 
 ## Token caching
 
-The provider caches the anonymous bearer token until 1 minute before expiry. The token is refreshed when:
+The provider caches the bearer token until 1 minute before expiry. The token is refreshed when:
 
 - No cached token exists (first request).
 - The cached token expires within the next minute.
@@ -131,11 +138,11 @@ The image or tag does not exist on Docker Hub. Verify the image name and tag.
 
 ### "registry returned status 401"
 
-The repository is private or the anonymous token was rejected. The provider only supports public repositories.
+The repository is private or the anonymous token was rejected. Configure a Docker Hub username and password (or personal access token) in the `dockerhub` config block to enable authenticated access.
 
 ### "token endpoint returned status 403"
 
-The `auth.docker.io` token service denied the request. This can happen if Docker Hub rate-limits anonymous access (100 pulls per 6 hours per IP). Consider using a Docker Hub account for authenticated access or switching to ECR/GCR if rate limits are a concern.
+The `auth.docker.io` token service denied the request. This can happen if Docker Hub rate-limits anonymous access (100 pulls per 6 hours per IP). Configure Docker Hub credentials to avoid rate limits, or switch to ECR/GCR if rate limits are a concern.
 
 ## See also
 

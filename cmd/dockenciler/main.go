@@ -64,8 +64,18 @@ func main() {
 		}
 		reg = gcrProvider
 	case "dockerhub":
-		reg = registry.NewDockerHubProvider(&http.Client{Timeout: 30 * time.Second})
-		slog.Info("Docker Hub registry provider initialized (anonymous access)")
+		dhCfg := registry.DockerHubConfig{}
+		if cfg.Registry.DockerHub != nil {
+			dhCfg.Username = cfg.Registry.DockerHub.Username
+			dhCfg.Password = cfg.Registry.DockerHub.Password
+			dhCfg.ConfigPath = cfg.Registry.DockerHub.ConfigPath
+		}
+		reg = registry.NewDockerHubProvider(&http.Client{Timeout: 30 * time.Second}, dhCfg)
+		if dhCfg.Username != "" {
+			slog.Info("Docker Hub registry provider initialized (authenticated access)")
+		} else {
+			slog.Info("Docker Hub registry provider initialized (anonymous access)")
+		}
 	default:
 		slog.Error("Unsupported registry type", "type", cfg.Registry.Type)
 		os.Exit(1)

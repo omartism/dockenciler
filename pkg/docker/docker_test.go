@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/api/types/system"
+	"github.com/docker/go-connections/nat"
 	"github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
@@ -349,3 +350,65 @@ m.ContainerInspectFunc = func(ctx context.Context, containerID string) (types.Co
 			})
 		}
 		}
+
+func TestPortBindingRoundTrip(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[nat.Port][]nat.PortBinding
+	}{
+		{
+			name: "simple port mapping without host IP",
+			input: map[nat.Port][]nat.PortBinding{
+				"80/tcp": {{HostIP: "", HostPort: "8080"}},
+			},
+		},
+		{
+			name: "port mapping with host IP",
+			input: map[nat.Port][]nat.PortBinding{
+				"80/tcp": {{HostIP: "127.0.0.1", HostPort: "8080"}},
+			},
+		},
+		{
+			name: "port mapping without protocol suffix",
+			input: map[nat.Port][]nat.PortBinding{
+				"443": {{HostIP: "0.0.0.0", HostPort: "443"}},
+			},
+		},
+		{
+			name: "multiple port bindings",
+			input: map[nat.Port][]nat.PortBinding{
+				"80/tcp":  {{HostIP: "127.0.0.1", HostPort: "8080"}},
+				"443/tcp": {{HostIP: "", HostPort: "8443"}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Serialize
+			serialized := portBindingsToStrings(tt.input)
+			// Deserialize
+			deserialized := parsePortBindings(serialized)
+
+			for port, expectedBindings := range tt.input {
+				got, ok := deserialized[port]
+				require.True(t, ok, "missing port %s in deserialized", port)
+				require.Equal(t, len(expectedBindings), len(got), "binding count mismatch for %s", port)
+				for i, expected := range expectedBindings {
+					assert.Equal(t, expected.HostIP, got[i].HostIP, "HostIP mismatch for %s", port)
+					assert.Equal(t, expected.HostPort, got[i].HostPort, "HostPort mismatch for %s", port)
+				}
+			}
+		})
+	}
+}
+
+func TestParsePortBindings_Nil(t *testing.T) {
+	result := parsePortBindings(nil)
+	assert.Assert(t, result == nil)
+}
+
+func TestPortBindingsToStrings_Nil(t *testing.T) {
+	result := portBindingsToStrings(nil)
+	assert.Assert(t, result == nil)
+}
