@@ -76,15 +76,16 @@ func TestDockerHubProvider_InvalidateCache(t *testing.T) {
 
 	// Set a cached token manually.
 	p.mu.Lock()
-	p.cachedToken = "some-token"
-	p.tokenExpiry = time.Now().Add(1 * time.Hour)
+	p.tokenCache = map[string]tokenCacheEntry{
+		"library/test": {token: "some-token", expiry: time.Now().Add(1 * time.Hour)},
+	}
 	p.mu.Unlock()
 
 	p.InvalidateCache()
 
 	p.mu.Lock()
-	if p.cachedToken != "" {
-		t.Errorf("Expected empty cached token after invalidate, got %q", p.cachedToken)
+	if len(p.tokenCache) != 0 {
+		t.Errorf("Expected empty token cache after invalidate, got %d entries", len(p.tokenCache))
 	}
 	p.mu.Unlock()
 }

@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+// tokenCacheEntry holds a scoped bearer token for a single repository.
+type tokenCacheEntry struct {
+	token  string
+	expiry time.Time
+}
+
 // DockerHubProvider implements the Registry interface for Docker Hub
 // (registry-1.docker.io) using the Docker Registry HTTP API v2.
 //
@@ -29,14 +35,13 @@ import (
 //   - myuser/myimage:tag          → registry-1.docker.io/myuser/myimage:tag
 //   - docker.io/library/postgres:18-alpine → uses docker.io as host, mapped to registry-1.docker.io
 type DockerHubProvider struct {
-	httpClient  *http.Client
-	cfg         DockerHubConfig
-	mu          sync.Mutex
-	cachedToken string
-	tokenExpiry time.Time
-	baseURL     string // Optional override for testing; empty means "https://<host>"
-	authURL     string // Optional override for testing; empty means "https://auth.docker.io"
-	cachedHost  string // Host cached from most recent GetLatestDigest call
+	httpClient *http.Client
+	cfg        DockerHubConfig
+	mu         sync.Mutex
+	tokenCache map[string]tokenCacheEntry // keyed by repoPath (e.g. "library/postgres")
+	baseURL    string                     // Optional override for testing; empty means "https://<host>"
+	authURL    string                     // Optional override for testing; empty means "https://auth.docker.io"
+	cachedHost string                     // Host cached from most recent GetLatestDigest call
 }
 
 // DockerHubConfig is the subset of config needed by the provider.
@@ -110,12 +115,11 @@ func (p *DockerHubProvider) registryBase(host string) string {
 // Registry interface implementation
 // --------------------------------------------------------------------------
 
-// InvalidateCache clears the cached anonymous token. Safe to call concurrently.
+// InvalidateCache clears all cached bearer tokens. Safe to call concurrently.
 func (p *DockerHubProvider) InvalidateCache() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.cachedToken = ""
-	p.tokenExpiry = time.Time{}
+	p.tokenCache = nil
 }
 
 // GetAuth returns Docker auth credentials. When credentials are configured,
@@ -219,20 +223,16 @@ func (p *DockerHubProvider) GetImageVersion(ctx context.Context, imageRef string
 // Anonymous token management
 // --------------------------------------------------------------------------
 
-// token returns a valid anonymous bearer token for Docker Hub.
-// Tokens are reused until 1 minute before expiry.
+// token returns a valid bearer token for the given Docker Hub repository.
+// Tokens are cached per-repository and reused until 1 minute before expiry.
 func (p *DockerHubProvider) token(ctx context.Context, repoPath string) (string, error) {
 	p.mu.Lock()
-	if p.cachedToken != "" && time.Now().Add(time.Minute).Before(p.tokenExpiry) {
-		tok := p.cachedToken
+	if entry, ok := p.tokenCache[repoPath]; ok && entry.token != "" && time.Now().Add(time.Minute).Before(entry.expiry) {
+		tok := entry.token
 		p.mu.Unlock()
 		return tok, nil
 	}
-	// Release the lock for the HTTP call, but set a flag so only one
-	// goroutine fetches. Double-check pattern.
 	p.mu.Unlock()
-
-	// Use a separate lock to serialize token fetches.
 	return p.fetchToken(ctx, repoPath)
 }
 
@@ -244,10 +244,9 @@ func (p *DockerHubProvider) fetchToken(ctx context.Context, repoPath string) (st
 
 	// Double-check after acquiring the fetch lock.
 	p.mu.Lock()
-	if p.cachedToken != "" && time.Now().Add(time.Minute).Before(p.tokenExpiry) {
-		tok := p.cachedToken
+	if entry, ok := p.tokenCache[repoPath]; ok && entry.token != "" && time.Now().Add(time.Minute).Before(entry.expiry) {
 		p.mu.Unlock()
-		return tok, nil
+		return entry.token, nil
 	}
 	p.mu.Unlock()
 
@@ -295,8 +294,10 @@ func (p *DockerHubProvider) fetchToken(ctx context.Context, repoPath string) (st
 
 	expiry := time.Now().Add(time.Duration(result.ExpiresIn) * time.Second)
 	p.mu.Lock()
-	p.cachedToken = result.Token
-	p.tokenExpiry = expiry
+	if p.tokenCache == nil {
+		p.tokenCache = make(map[string]tokenCacheEntry)
+	}
+	p.tokenCache[repoPath] = tokenCacheEntry{token: result.Token, expiry: expiry}
 	p.mu.Unlock()
 
 	return result.Token, nil
