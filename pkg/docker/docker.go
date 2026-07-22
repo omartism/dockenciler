@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -33,6 +34,7 @@ type Container struct {
 type ContainerSpec struct {
 	NetworkMode  string
 	Links        []string
+	Labels       map[string]string
 	RestartPolicy string
 	CapAdd       []string
 	CapDrop      []string
@@ -141,6 +143,7 @@ func (d *DockerClientImpl) InspectContainer(ctx context.Context, id string) (Con
 
 	if inspected.HostConfig != nil {
 		spec.NetworkMode = string(inspected.HostConfig.NetworkMode)
+		spec.Links = inspected.HostConfig.Links
 		if inspected.HostConfig.RestartPolicy.Name != "" {
 			spec.RestartPolicy = string(inspected.HostConfig.RestartPolicy.Name)
 		}
@@ -156,6 +159,12 @@ func (d *DockerClientImpl) InspectContainer(ctx context.Context, id string) (Con
 	}
 
 	if inspected.Config != nil {
+		spec.Env = inspected.Config.Env
+		spec.Entrypoint = []string(inspected.Config.Entrypoint)
+		spec.Cmd = []string(inspected.Config.Cmd)
+		spec.WorkingDir = inspected.Config.WorkingDir
+		spec.User = inspected.Config.User
+		spec.Labels = inspected.Config.Labels
 		spec.Healthcheck = healthcheckToString(inspected.Config.Healthcheck)
 	}
 
@@ -214,6 +223,7 @@ func (d *DockerClientImpl) RecreateContainer(ctx context.Context, id string, spe
 		User:         spec.User,
 		Entrypoint:   strslice.StrSlice(spec.Entrypoint),
 		Cmd:          strslice.StrSlice(spec.Cmd),
+		Labels:       spec.Labels,
 	}
 	if spec.Healthcheck != "" {
 		var hc *container.HealthConfig
@@ -223,7 +233,9 @@ func (d *DockerClientImpl) RecreateContainer(ctx context.Context, id string, spe
 		containerConfig.Healthcheck = hc
 	}
 
-	hostConfig := &container.HostConfig{}
+	hostConfig := &container.HostConfig{
+		Links: spec.Links,
+	}
 	if spec.NetworkMode != "" {
 		hostConfig.NetworkMode = container.NetworkMode(spec.NetworkMode)
 	}
@@ -380,7 +392,12 @@ func mountsToStrings(mounts []mount.Mount) []string {
 	}
 	result := make([]string, 0, len(mounts))
 	for _, m := range mounts {
-		result = append(result, fmt.Sprintf("%s:%s:%s", m.Source, m.Target, string(m.Type)))
+		b, err := json.Marshal(m)
+		if err != nil {
+			slog.Warn("failed to marshal mount", "error", err)
+			continue
+		}
+		result = append(result, string(b))
 	}
 	return result
 }
@@ -439,16 +456,13 @@ func parseMounts(s []string) []mount.Mount {
 		return nil
 	}
 	result := make([]mount.Mount, 0, len(s))
-	for _, m := range s {
-		parts := strings.SplitN(m, ":", 3)
-		if len(parts) != 3 {
+	for _, ms := range s {
+		var m mount.Mount
+		if err := json.Unmarshal([]byte(ms), &m); err != nil {
+			slog.Warn("failed to unmarshal mount", "error", err)
 			continue
 		}
-		result = append(result, mount.Mount{
-			Source: parts[0],
-			Target: parts[1],
-			Type:   mount.Type(parts[2]),
-		})
+		result = append(result, m)
 	}
 	return result
 }

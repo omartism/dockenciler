@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"testing"
@@ -9,8 +10,10 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/registry"
+	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/api/types/system"
 	"github.com/docker/go-connections/nat"
@@ -411,4 +414,175 @@ func TestParsePortBindings_Nil(t *testing.T) {
 func TestPortBindingsToStrings_Nil(t *testing.T) {
 	result := portBindingsToStrings(nil)
 	assert.Assert(t, result == nil)
+}
+
+func TestInspectContainer(t *testing.T) {
+	mockClient := &mockDockerClient{
+		ContainerInspectFunc: func(ctx context.Context, id string) (types.ContainerJSON, error) {
+			return types.ContainerJSON{
+				Config: &container.Config{
+					Env:        []string{"FOO=bar", "BAZ=qux"},
+					Entrypoint: strslice.StrSlice{"/entry.sh"},
+					Cmd:        strslice.StrSlice{"arg1", "arg2"},
+					WorkingDir: "/app",
+					User:       "1000:1000",
+					Labels:     map[string]string{"label1": "value1"},
+					Healthcheck: &container.HealthConfig{
+						Test: []string{"CMD", "curl", "-f", "localhost"},
+					},
+				},
+				ContainerJSONBase: &container.ContainerJSONBase{
+					HostConfig: &container.HostConfig{
+						NetworkMode: "bridge",
+						Links:       []string{"container1:alias1"},
+						RestartPolicy: container.RestartPolicy{
+							Name: "always",
+						},
+						CapAdd:      []string{"SYS_ADMIN"},
+						CapDrop:     []string{"ALL"},
+						SecurityOpt: []string{"no-new-privileges:true"},
+						Tmpfs:       map[string]string{"/tmp": "size=64M"},
+						Resources: container.Resources{
+							Devices: []container.DeviceMapping{
+								{PathOnHost: "/dev/fuse", PathInContainer: "/dev/fuse", CgroupPermissions: "rwm"},
+							},
+						},
+						PidMode: "host",
+						IpcMode: "private",
+						Mounts: []mount.Mount{
+							{
+								Type:     mount.TypeBind,
+								Source:   "/host/path",
+								Target:   "/container/path",
+								ReadOnly: true,
+								BindOptions: &mount.BindOptions{
+									Propagation: mount.PropagationRSlave,
+								},
+							},
+						},
+						PortBindings: nat.PortMap{
+							"443/tcp": {{HostIP: "127.0.0.1", HostPort: "8443"}},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	d := &DockerClientImpl{client: mockClient}
+	spec, err := d.InspectContainer(context.Background(), "test-container")
+	require.NoError(t, err)
+
+	// Verify Config fields
+	assert.DeepEqual(t, []string{"FOO=bar", "BAZ=qux"}, spec.Env)
+	assert.DeepEqual(t, []string{"/entry.sh"}, spec.Entrypoint)
+	assert.DeepEqual(t, []string{"arg1", "arg2"}, spec.Cmd)
+	assert.Equal(t, "/app", spec.WorkingDir)
+	assert.Equal(t, "1000:1000", spec.User)
+	assert.DeepEqual(t, map[string]string{"label1": "value1"}, spec.Labels)
+
+	// Verify HostConfig fields
+	assert.Equal(t, "bridge", spec.NetworkMode)
+	assert.DeepEqual(t, []string{"container1:alias1"}, spec.Links)
+	assert.Equal(t, "always", spec.RestartPolicy)
+	assert.DeepEqual(t, []string{"SYS_ADMIN"}, spec.CapAdd)
+	assert.DeepEqual(t, []string{"ALL"}, spec.CapDrop)
+	assert.DeepEqual(t, []string{"no-new-privileges:true"}, spec.SecurityOpt)
+	assert.DeepEqual(t, []string{"/tmp=size=64M"}, spec.Tmpfs)
+	assert.DeepEqual(t, []string{"/dev/fuse:/dev/fuse:rwm"}, spec.Devices)
+	assert.Equal(t, "host", spec.PidMode)
+	assert.Equal(t, "private", spec.IpcMode)
+
+	// Verify PortBindings
+	require.Equal(t, 1, len(spec.PortBindings))
+	assert.Equal(t, "443/tcp:127.0.0.1:8443", spec.PortBindings[0])
+
+	// Verify Mounts - should be valid JSON
+	require.Equal(t, 1, len(spec.Mounts))
+	var parsedMount mount.Mount
+	err = json.Unmarshal([]byte(spec.Mounts[0]), &parsedMount)
+	require.NoError(t, err)
+	assert.Equal(t, mount.TypeBind, parsedMount.Type)
+	assert.Equal(t, "/host/path", parsedMount.Source)
+	assert.Equal(t, "/container/path", parsedMount.Target)
+	assert.Equal(t, true, parsedMount.ReadOnly)
+	require.NotNil(t, parsedMount.BindOptions)
+	assert.Equal(t, mount.PropagationRSlave, parsedMount.BindOptions.Propagation)
+
+	// Verify Healthcheck
+	require.NotEqual(t, "", spec.Healthcheck)
+	var hc container.HealthConfig
+	err = json.Unmarshal([]byte(spec.Healthcheck), &hc)
+	require.NoError(t, err)
+	assert.DeepEqual(t, []string{"CMD", "curl", "-f", "localhost"}, hc.Test)
+}
+
+func TestMountRoundTrip(t *testing.T) {
+	t.Run("bind mount with ReadOnly and BindOptions", func(t *testing.T) {
+		mounts := []mount.Mount{
+			{
+				Type:     mount.TypeBind,
+				Source:   "/host/path",
+				Target:   "/container/path",
+				ReadOnly: true,
+				BindOptions: &mount.BindOptions{
+					Propagation: mount.PropagationRSlave,
+				},
+			},
+		}
+
+		strings := mountsToStrings(mounts)
+		require.Equal(t, 1, len(strings))
+
+		parsed := parseMounts(strings)
+		require.Equal(t, 1, len(parsed))
+		assert.Equal(t, mount.TypeBind, parsed[0].Type)
+		assert.Equal(t, "/host/path", parsed[0].Source)
+		assert.Equal(t, "/container/path", parsed[0].Target)
+		assert.Equal(t, true, parsed[0].ReadOnly)
+		require.NotNil(t, parsed[0].BindOptions)
+		assert.Equal(t, mount.PropagationRSlave, parsed[0].BindOptions.Propagation)
+	})
+
+	t.Run("volume mount with VolumeOptions", func(t *testing.T) {
+		mounts := []mount.Mount{
+			{
+				Type:   mount.TypeVolume,
+				Source: "myvolume",
+				Target: "/container/vol",
+				VolumeOptions: &mount.VolumeOptions{
+					NoCopy: true,
+					Labels: map[string]string{"key": "value"},
+				},
+			},
+		}
+
+		strings := mountsToStrings(mounts)
+		require.Equal(t, 1, len(strings))
+
+		parsed := parseMounts(strings)
+		require.Equal(t, 1, len(parsed))
+		assert.Equal(t, mount.TypeVolume, parsed[0].Type)
+		assert.Equal(t, "myvolume", parsed[0].Source)
+		assert.Equal(t, "/container/vol", parsed[0].Target)
+		require.NotNil(t, parsed[0].VolumeOptions)
+		assert.Equal(t, true, parsed[0].VolumeOptions.NoCopy)
+		assert.DeepEqual(t, map[string]string{"key": "value"}, parsed[0].VolumeOptions.Labels)
+	})
+
+	t.Run("nil mounts returns nil", func(t *testing.T) {
+		result := mountsToStrings(nil)
+		assert.Assert(t, result == nil)
+
+		result2 := parseMounts(nil)
+		assert.Assert(t, result2 == nil)
+	})
+
+	t.Run("empty mounts slice round-trips", func(t *testing.T) {
+		result := mountsToStrings([]mount.Mount{})
+		assert.Equal(t, 0, len(result))
+
+		parsed := parseMounts(result)
+		assert.Equal(t, 0, len(parsed))
+	})
 }
