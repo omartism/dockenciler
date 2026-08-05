@@ -122,6 +122,12 @@ func (p *DockerHubProvider) InvalidateCache() {
 	p.tokenCache = nil
 }
 
+// HasCredentials reports whether the provider has Docker Hub credentials,
+// either explicitly configured or resolved from a Docker CLI config.json file.
+func (p *DockerHubProvider) HasCredentials() bool {
+	return p.cfg.Username != ""
+}
+
 // GetAuth returns Docker auth credentials. When credentials are configured,
 // they are returned for Docker daemon pulls. For anonymous access, empty
 // credentials are returned and the Docker daemon handles anonymous pulls.

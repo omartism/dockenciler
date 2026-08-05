@@ -70,8 +70,9 @@ func main() {
 			dhCfg.Password = cfg.Registry.DockerHub.Password
 			dhCfg.ConfigPath = cfg.Registry.DockerHub.ConfigPath
 		}
-		reg = registry.NewDockerHubProvider(&http.Client{Timeout: 30 * time.Second}, dhCfg)
-		if dhCfg.Username != "" {
+		dhProvider := registry.NewDockerHubProvider(&http.Client{Timeout: 30 * time.Second}, dhCfg)
+		reg = dhProvider
+		if dhProvider.HasCredentials() {
 			slog.Info("Docker Hub registry provider initialized (authenticated access)")
 		} else {
 			slog.Info("Docker Hub registry provider initialized (anonymous access)")

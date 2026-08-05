@@ -895,6 +895,31 @@ func TestDockerHubProvider_ResolveCredentialsFromFile(t *testing.T) {
 	}
 }
 
+func TestDockerHubProvider_HasCredentials(t *testing.T) {
+	dir := t.TempDir()
+	auth := base64.StdEncoding.EncodeToString([]byte("fileuser:filepass"))
+	data := `{"auths":{"https://index.docker.io/v1/":{"auth":"` + auth + `"}}}`
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Credentials resolved from the config file.
+	if p := NewDockerHubProvider(nil, DockerHubConfig{ConfigPath: configPath}); !p.HasCredentials() {
+		t.Error("expected HasCredentials() == true when credentials are resolved from config file")
+	}
+
+	// Explicit credentials.
+	if p := NewDockerHubProvider(nil, DockerHubConfig{Username: "user", Password: "pass"}); !p.HasCredentials() {
+		t.Error("expected HasCredentials() == true when explicit credentials are set")
+	}
+
+	// Anonymous fallback.
+	if p := NewDockerHubProvider(nil, DockerHubConfig{}); p.HasCredentials() {
+		t.Error("expected HasCredentials() == false for anonymous provider")
+	}
+}
+
 func TestDockerHubProvider_ResolveCredentialsExplicitTakesPriority(t *testing.T) {
 	dir := t.TempDir()
 	auth := base64.StdEncoding.EncodeToString([]byte("fileuser:filepass"))
