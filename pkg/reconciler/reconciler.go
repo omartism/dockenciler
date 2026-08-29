@@ -61,12 +61,12 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	slog.Info("Starting reconciliation", "container_count", len(containers))
 
 	var (
-		checked   int
-		updated   int
-		upToDate  int
-		skipped   int
-		failed    int
-		skipLog   []string
+		checked  int
+		updated  int
+		upToDate int
+		skipped  int
+		failed   int
+		skipLog  []string
 	)
 
 	for _, container := range containers {
@@ -164,10 +164,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			// Check if error is related to authorization or credentials
 			if strings.Contains(err.Error(), "authorization failed") || strings.Contains(err.Error(), "no basic auth credentials") {
 				slog.Warn("Pull failed with auth error, invalidating cache and retrying", "container_id", container.ID, "image", container.Image, "error", err)
-				
+
 				// Invalidate cache
 				r.Registry.InvalidateCache()
-				
+
 				// Re-fetch auth
 				auth2, err2 := r.Registry.GetAuth(ctx)
 				if err2 != nil {
@@ -175,21 +175,21 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 					failed++
 					continue // Continue to next container
 				}
-				
+
 				// Re-authenticate
 				if err := r.DockerClient.Authenticate(ctx, auth2.Username, auth2.Password, auth2.RegistryHost); err != nil {
 					slog.Error("Failed to re-authenticate with Docker daemon", "container_id", container.ID, "image", container.Image, "error", err)
 					failed++
 					continue // Continue to next container
 				}
-				
+
 				// Retry pull once
 				if err := r.DockerClient.PullImage(ctx, imageRef); err != nil {
 					slog.Error("Failed to pull image after retry", "container_id", container.ID, "image", container.Image, "error", err)
 					failed++
 					continue // Continue to next container
 				}
-				
+
 				slog.Info("Pull succeeded after retry", "container_id", container.ID, "image", container.Image)
 			} else {
 				slog.Error("Failed to pull image", "container_id", container.ID, "image", container.Image, "error", err)

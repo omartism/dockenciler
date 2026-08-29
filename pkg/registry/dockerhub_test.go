@@ -724,12 +724,12 @@ func TestDockerHubProvider_fetchToken_Anonymous(t *testing.T) {
 
 func TestReadDockerConfigAuth(t *testing.T) {
 	tests := []struct {
-		name          string
-		setupFile     func(t *testing.T) string // returns file path, cleans up temp dir
-		wantUsername  string
-		wantPassword  string
-		wantErr       bool
-		errContains   string
+		name         string
+		setupFile    func(t *testing.T) string // returns file path, cleans up temp dir
+		wantUsername string
+		wantPassword string
+		wantErr      bool
+		errContains  string
 	}{
 		{
 			name: "valid config with index.docker.io host",

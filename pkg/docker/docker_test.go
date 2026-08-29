@@ -23,17 +23,17 @@ import (
 )
 
 type mockDockerClient struct {
-	InfoFunc                func(context.Context) (system.Info, error)
-	ServiceUpdateFunc       func(context.Context, string, swarm.Version, swarm.ServiceSpec, types.ServiceUpdateOptions) (swarm.ServiceUpdateResponse, error)
-	ContainerInspectFunc    func(context.Context, string) (types.ContainerJSON, error)
+	InfoFunc                  func(context.Context) (system.Info, error)
+	ServiceUpdateFunc         func(context.Context, string, swarm.Version, swarm.ServiceSpec, types.ServiceUpdateOptions) (swarm.ServiceUpdateResponse, error)
+	ContainerInspectFunc      func(context.Context, string) (types.ContainerJSON, error)
 	ServiceInspectWithRawFunc func(context.Context, string, types.ServiceInspectOptions) (swarm.Service, []byte, error)
-	ContainerListFunc      func(context.Context, container.ListOptions) ([]types.Container, error)
-	ImagePullFunc          func(context.Context, string, image.PullOptions) (io.ReadCloser, error)
-	ContainerRemoveFunc    func(context.Context, string, container.RemoveOptions) error
-	ContainerCreateFunc    func(context.Context, *container.Config, *container.HostConfig, *network.NetworkingConfig, *v1.Platform, string) (container.CreateResponse, error)
-	ContainerStartFunc     func(context.Context, string, container.StartOptions) error
-	RegistryLoginFunc      func(context.Context, registry.AuthConfig) (registry.AuthenticateOKBody, error)
-	ImageInspectWithRawFunc func(context.Context, string) (types.ImageInspect, []byte, error)
+	ContainerListFunc         func(context.Context, container.ListOptions) ([]types.Container, error)
+	ImagePullFunc             func(context.Context, string, image.PullOptions) (io.ReadCloser, error)
+	ContainerRemoveFunc       func(context.Context, string, container.RemoveOptions) error
+	ContainerCreateFunc       func(context.Context, *container.Config, *container.HostConfig, *network.NetworkingConfig, *v1.Platform, string) (container.CreateResponse, error)
+	ContainerStartFunc        func(context.Context, string, container.StartOptions) error
+	RegistryLoginFunc         func(context.Context, registry.AuthConfig) (registry.AuthenticateOKBody, error)
+	ImageInspectWithRawFunc   func(context.Context, string) (types.ImageInspect, []byte, error)
 }
 
 func (m *mockDockerClient) Info(ctx context.Context) (system.Info, error) {
@@ -115,10 +115,10 @@ func (m *mockDockerClient) ImageInspectWithRaw(ctx context.Context, ref string) 
 
 func TestIsSwarmMode(t *testing.T) {
 	tests := []struct {
-		name          string
-		info          system.Info
-		wantIsSwarm   bool
-		wantError     bool
+		name        string
+		info        system.Info
+		wantIsSwarm bool
+		wantError   bool
 	}{
 		{
 			name: "swarm active",
@@ -140,9 +140,9 @@ func TestIsSwarmMode(t *testing.T) {
 			wantIsSwarm: false,
 			wantError:   false,
 		},
-{
-			name: "error",
-			info: system.Info{},
+		{
+			name:        "error",
+			info:        system.Info{},
 			wantIsSwarm: false,
 			wantError:   true,
 		},
@@ -273,7 +273,7 @@ func TestUpdateService(t *testing.T) {
 			if tt.setupMock != nil {
 				tt.setupMock(mockClient)
 			}
-dockerClient := &DockerClientImpl{client: mockClient}
+			dockerClient := &DockerClientImpl{client: mockClient}
 
 			err := dockerClient.UpdateService(context.Background(), tt.serviceID, tt.spec)
 			if tt.wantErr {
@@ -290,16 +290,16 @@ dockerClient := &DockerClientImpl{client: mockClient}
 func TestRecreateContainerSwarmManaged(t *testing.T) {
 	tests := []struct {
 		name          string
-		containerID string
-		setupMock	func(*mockDockerClient)
-		wantErr		bool
-		expectedError	string
+		containerID   string
+		setupMock     func(*mockDockerClient)
+		wantErr       bool
+		expectedError string
 	}{
 		{
-			name: "container is managed by swarm service",
+			name:        "container is managed by swarm service",
 			containerID: "container1",
 			setupMock: func(m *mockDockerClient) {
-m.ContainerInspectFunc = func(ctx context.Context, containerID string) (types.ContainerJSON, error) {
+				m.ContainerInspectFunc = func(ctx context.Context, containerID string) (types.ContainerJSON, error) {
 					return types.ContainerJSON{
 						Config: &container.Config{
 							Labels: map[string]string{
@@ -309,13 +309,13 @@ m.ContainerInspectFunc = func(ctx context.Context, containerID string) (types.Co
 					}, nil
 				}
 			},
-			wantErr:		true,
-			expectedError:	"container is managed by a swarm service",
+			wantErr:       true,
+			expectedError: "container is managed by a swarm service",
 		},
 		{
-			name:		"container is not managed by swarm service",
-			containerID:	"container2",
-			setupMock:	func(m *mockDockerClient) {
+			name:        "container is not managed by swarm service",
+			containerID: "container2",
+			setupMock: func(m *mockDockerClient) {
 				m.ContainerInspectFunc = func(ctx context.Context, containerID string) (types.ContainerJSON, error) {
 					return types.ContainerJSON{
 						Config: &container.Config{
@@ -324,20 +324,20 @@ m.ContainerInspectFunc = func(ctx context.Context, containerID string) (types.Co
 					}, nil
 				}
 			},
-			wantErr:	false,
-			expectedError:	"",
+			wantErr:       false,
+			expectedError: "",
 		},
-		}
+	}
 
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				mockClient := &mockDockerClient{}
-				if tt.setupMock != nil {
-					tt.setupMock(mockClient)
-				}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &mockDockerClient{}
+			if tt.setupMock != nil {
+				tt.setupMock(mockClient)
+			}
 			dockerClient := &DockerClientImpl{client: mockClient}
 
-				// We need a dummy spec and newImage for the RecreateContainer call
+			// We need a dummy spec and newImage for the RecreateContainer call
 			spec := ContainerSpec{}
 			newImage := "image"
 
@@ -350,14 +350,14 @@ m.ContainerInspectFunc = func(ctx context.Context, containerID string) (types.Co
 			} else {
 				require.NoError(t, err)
 			}
-			})
-		}
-		}
+		})
+	}
+}
 
 func TestPortBindingRoundTrip(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    map[nat.Port][]nat.PortBinding
+		name  string
+		input map[nat.Port][]nat.PortBinding
 	}{
 		{
 			name: "simple port mapping without host IP",

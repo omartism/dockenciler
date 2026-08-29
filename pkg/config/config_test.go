@@ -1,17 +1,17 @@
 package config
 
 import (
-    "encoding/json"
-    "os"
-    "path/filepath"
-    "testing"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
 
-    "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLoadConfig(t *testing.T) {
-    // Test with complete config
-    completeConfig := `{
+	// Test with complete config
+	completeConfig := `{
         "registry": {
             "type": "ecr",
             "ecr": {
@@ -33,52 +33,52 @@ func TestLoadConfig(t *testing.T) {
         }
     }`
 
-    config, err := LoadConfigFromString(completeConfig)
-    if err != nil {
-        t.Fatalf("Failed to load complete config: %v", err)
-    }
+	config, err := LoadConfigFromString(completeConfig)
+	if err != nil {
+		t.Fatalf("Failed to load complete config: %v", err)
+	}
 
-    if config.Registry.Type != "ecr" {
-        t.Errorf("Expected registry type 'ecr', got '%s'", config.Registry.Type)
-    }
-    if config.Registry.ECR == nil {
-        t.Fatal("Expected ECR config to be non-nil")
-    }
-    if config.Registry.ECR.Region != "us-west-2" {
-        t.Errorf("Expected region 'us-west-2', got '%s'", config.Registry.ECR.Region)
-    }
-    if config.Registry.ECR.AccessKey != "test-key" {
-        t.Errorf("Expected access_key 'test-key', got '%s'", config.Registry.ECR.AccessKey)
-    }
-    if config.Registry.ECR.SecretKey != "test-secret" {
-        t.Errorf("Expected secret_key 'test-secret', got '%s'", config.Registry.ECR.SecretKey)
-    }
-    if config.Docker.SocketPath != "/var/run/docker.sock" {
-        t.Errorf("Expected socket path '/var/run/docker.sock', got '%s'", config.Docker.SocketPath)
-    }
-    if config.Docker.LabelFilter != "dockenciler.autoupdate=true" {
-        t.Errorf("Expected label filter 'dockenciler.autoupdate=true', got '%s'", config.Docker.LabelFilter)
-    }
-    if config.ReconcileInterval != "1h" {
-        t.Errorf("Expected reconcile interval '1h', got '%s'", config.ReconcileInterval)
-    }
-    if config.LogLevel != "info" {
-        t.Errorf("Expected log level 'info', got '%s'", config.LogLevel)
-    }
-    if config.Criteria.Version != "v1.0.0" {
-        t.Errorf("Expected criteria version 'v1.0.0', got '%s'", config.Criteria.Version)
-    }
-    if config.Criteria.Regex != "^v\\d+\\.\\d+\\.\\d+$" {
-        t.Errorf("Expected criteria regex '^v\\\\d+\\\\.\\\\d+\\\\.\\\\d+$', got '%s'", config.Criteria.Regex)
-    }
-    if config.Criteria.Digest != "sha256:abc123" {
-        t.Errorf("Expected criteria digest 'sha256:abc123', got '%s'", config.Criteria.Digest)
-    }
+	if config.Registry.Type != "ecr" {
+		t.Errorf("Expected registry type 'ecr', got '%s'", config.Registry.Type)
+	}
+	if config.Registry.ECR == nil {
+		t.Fatal("Expected ECR config to be non-nil")
+	}
+	if config.Registry.ECR.Region != "us-west-2" {
+		t.Errorf("Expected region 'us-west-2', got '%s'", config.Registry.ECR.Region)
+	}
+	if config.Registry.ECR.AccessKey != "test-key" {
+		t.Errorf("Expected access_key 'test-key', got '%s'", config.Registry.ECR.AccessKey)
+	}
+	if config.Registry.ECR.SecretKey != "test-secret" {
+		t.Errorf("Expected secret_key 'test-secret', got '%s'", config.Registry.ECR.SecretKey)
+	}
+	if config.Docker.SocketPath != "/var/run/docker.sock" {
+		t.Errorf("Expected socket path '/var/run/docker.sock', got '%s'", config.Docker.SocketPath)
+	}
+	if config.Docker.LabelFilter != "dockenciler.autoupdate=true" {
+		t.Errorf("Expected label filter 'dockenciler.autoupdate=true', got '%s'", config.Docker.LabelFilter)
+	}
+	if config.ReconcileInterval != "1h" {
+		t.Errorf("Expected reconcile interval '1h', got '%s'", config.ReconcileInterval)
+	}
+	if config.LogLevel != "info" {
+		t.Errorf("Expected log level 'info', got '%s'", config.LogLevel)
+	}
+	if config.Criteria.Version != "v1.0.0" {
+		t.Errorf("Expected criteria version 'v1.0.0', got '%s'", config.Criteria.Version)
+	}
+	if config.Criteria.Regex != "^v\\d+\\.\\d+\\.\\d+$" {
+		t.Errorf("Expected criteria regex '^v\\\\d+\\\\.\\\\d+\\\\.\\\\d+$', got '%s'", config.Criteria.Regex)
+	}
+	if config.Criteria.Digest != "sha256:abc123" {
+		t.Errorf("Expected criteria digest 'sha256:abc123', got '%s'", config.Criteria.Digest)
+	}
 }
 
 func TestLoadConfigWithDefaults(t *testing.T) {
-    // Test with minimal config (only registry settings)
-    minimalConfig := `{
+	// Test with minimal config (only registry settings)
+	minimalConfig := `{
         "registry": {
             "type": "ecr",
             "ecr": {
@@ -87,39 +87,39 @@ func TestLoadConfigWithDefaults(t *testing.T) {
         }
     }`
 
-    config, err := LoadConfigFromString(minimalConfig)
-    if err != nil {
-        t.Fatalf("Failed to load minimal config: %v", err)
-    }
+	config, err := LoadConfigFromString(minimalConfig)
+	if err != nil {
+		t.Fatalf("Failed to load minimal config: %v", err)
+	}
 
-    // Check that defaults were applied
-    if config.Docker.SocketPath != "/var/run/docker.sock" {
-        t.Errorf("Expected default socket path '/var/run/docker.sock', got '%s'", config.Docker.SocketPath)
-    }
-    if config.Docker.LabelFilter != "dockenciler.autoupdate=true" {
-        t.Errorf("Expected default label filter 'dockenciler.autoupdate=true', got '%s'", config.Docker.LabelFilter)
-    }
-    // Check that criteria fields are empty (not set)
-    if config.Criteria.Version != "" {
-        t.Errorf("Expected empty criteria version, got '%s'", config.Criteria.Version)
-    }
-    if config.Criteria.Regex != "" {
-        t.Errorf("Expected empty criteria regex, got '%s'", config.Criteria.Regex)
-    }
-    if config.Criteria.Digest != "" {
-        t.Errorf("Expected empty criteria digest, got '%s'", config.Criteria.Digest)
-    }
-    // Check that new fields have defaults
-    if config.DryRun != false {
-        t.Errorf("Expected default dry_run to be false, got '%v'", config.DryRun)
-    }
-    if len(config.Exclusions) != 0 {
-        t.Errorf("Expected empty exclusions list, got '%v'", config.Exclusions)
-    }
+	// Check that defaults were applied
+	if config.Docker.SocketPath != "/var/run/docker.sock" {
+		t.Errorf("Expected default socket path '/var/run/docker.sock', got '%s'", config.Docker.SocketPath)
+	}
+	if config.Docker.LabelFilter != "dockenciler.autoupdate=true" {
+		t.Errorf("Expected default label filter 'dockenciler.autoupdate=true', got '%s'", config.Docker.LabelFilter)
+	}
+	// Check that criteria fields are empty (not set)
+	if config.Criteria.Version != "" {
+		t.Errorf("Expected empty criteria version, got '%s'", config.Criteria.Version)
+	}
+	if config.Criteria.Regex != "" {
+		t.Errorf("Expected empty criteria regex, got '%s'", config.Criteria.Regex)
+	}
+	if config.Criteria.Digest != "" {
+		t.Errorf("Expected empty criteria digest, got '%s'", config.Criteria.Digest)
+	}
+	// Check that new fields have defaults
+	if config.DryRun != false {
+		t.Errorf("Expected default dry_run to be false, got '%v'", config.DryRun)
+	}
+	if len(config.Exclusions) != 0 {
+		t.Errorf("Expected empty exclusions list, got '%v'", config.Exclusions)
+	}
 }
 
 func TestLoadConfig_GCR(t *testing.T) {
-    gcrConfig := `{
+	gcrConfig := `{
         "registry": {
             "type": "gcr",
             "gcr": {
@@ -130,49 +130,49 @@ func TestLoadConfig_GCR(t *testing.T) {
         }
     }`
 
-    config, err := LoadConfigFromString(gcrConfig)
-    if err != nil {
-        t.Fatalf("Failed to load GCR config: %v", err)
-    }
+	config, err := LoadConfigFromString(gcrConfig)
+	if err != nil {
+		t.Fatalf("Failed to load GCR config: %v", err)
+	}
 
-    if config.Registry.Type != "gcr" {
-        t.Errorf("Expected registry type 'gcr', got '%s'", config.Registry.Type)
-    }
-    if config.Registry.GCR == nil {
-        t.Fatal("Expected GCR config to be non-nil")
-    }
-    if config.Registry.GCR.Auth.Method != "adc" {
-        t.Errorf("Expected GCR auth method 'adc', got '%s'", config.Registry.GCR.Auth.Method)
-    }
+	if config.Registry.Type != "gcr" {
+		t.Errorf("Expected registry type 'gcr', got '%s'", config.Registry.Type)
+	}
+	if config.Registry.GCR == nil {
+		t.Fatal("Expected GCR config to be non-nil")
+	}
+	if config.Registry.GCR.Auth.Method != "adc" {
+		t.Errorf("Expected GCR auth method 'adc', got '%s'", config.Registry.GCR.Auth.Method)
+	}
 }
 
 func TestSetupLogging(t *testing.T) {
-    // Test that SetupLogging correctly sets the log level
-    // We can verify this by checking if debug messages are printed when level is "debug"
-    // and not printed when level is "info"
-    
-    // Test with debug level
-    SetupLogging("debug", true)
-    // When level is debug, both debug and info messages should be printed
-    // We can't easily capture this without mocking, but we can at least verify
-    // that the function doesn't panic
-    
-    // Test with info level  
-    SetupLogging("info", true)
-    // When level is info, debug messages should not be printed
-    // Again, we can't easily capture this without mocking
-    
-    // Test with warn level
-    SetupLogging("warn", true)
-    
-    // Test with error level
-    SetupLogging("error", true)
-    
-    // Test with unknown level (should default to info)
-    SetupLogging("unknown", true)
-    
-    // Test with empty level (should default to info)
-    SetupLogging("", false)
+	// Test that SetupLogging correctly sets the log level
+	// We can verify this by checking if debug messages are printed when level is "debug"
+	// and not printed when level is "info"
+
+	// Test with debug level
+	SetupLogging("debug", true)
+	// When level is debug, both debug and info messages should be printed
+	// We can't easily capture this without mocking, but we can at least verify
+	// that the function doesn't panic
+
+	// Test with info level
+	SetupLogging("info", true)
+	// When level is info, debug messages should not be printed
+	// Again, we can't easily capture this without mocking
+
+	// Test with warn level
+	SetupLogging("warn", true)
+
+	// Test with error level
+	SetupLogging("error", true)
+
+	// Test with unknown level (should default to info)
+	SetupLogging("unknown", true)
+
+	// Test with empty level (should default to info)
+	SetupLogging("", false)
 }
 
 // TestExampleConfigs validates every docs/examples/*.json file by loading each
@@ -182,10 +182,10 @@ func TestSetupLogging(t *testing.T) {
 // Phase 3 of the docs revamp.
 func TestExampleConfigs(t *testing.T) {
 	type expectation struct {
-		file          string
-		registryType  string
-		needsECR      bool
-		needsGCR      bool
+		file         string
+		registryType string
+		needsECR     bool
+		needsGCR     bool
 	}
 	expectations := []expectation{
 		{file: "ecr-basic.json", registryType: "ecr", needsECR: true},
@@ -254,18 +254,18 @@ func TestExampleConfigs(t *testing.T) {
 
 // Helper function to load config from string (for testing)
 func LoadConfigFromString(configStr string) (*Config, error) {
-    var config Config
-    if err := json.Unmarshal([]byte(configStr), &config); err != nil {
-        return nil, err
-    }
+	var config Config
+	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
+		return nil, err
+	}
 
-    // Set default values for Docker settings if empty
-    if config.Docker.SocketPath == "" {
-        config.Docker.SocketPath = "/var/run/docker.sock"
-    }
-    if config.Docker.LabelFilter == "" {
-        config.Docker.LabelFilter = "dockenciler.autoupdate=true"
-    }
+	// Set default values for Docker settings if empty
+	if config.Docker.SocketPath == "" {
+		config.Docker.SocketPath = "/var/run/docker.sock"
+	}
+	if config.Docker.LabelFilter == "" {
+		config.Docker.LabelFilter = "dockenciler.autoupdate=true"
+	}
 
-    return &config, nil
+	return &config, nil
 }

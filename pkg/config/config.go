@@ -18,7 +18,7 @@ type ECRConfig struct {
 }
 
 type GCRAuth struct {
-	Method             string `json:"method" mapstructure:"method"`                       // "adc" | "service_account"
+	Method             string `json:"method" mapstructure:"method"` // "adc" | "service_account"
 	ServiceAccountFile string `json:"service_account_file" mapstructure:"service_account_file"`
 }
 
