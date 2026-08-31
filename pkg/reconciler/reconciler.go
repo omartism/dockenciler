@@ -95,8 +95,17 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			continue
 		}
 
-		slog.Info("Checking container", "container_id", container.ID, "image", container.Image)
+		// Skip stopped containers — respects `docker stop` / `docker rm` intent.
+		// ListContainers now filters to running only (All:false), but keep this
+		// guard for mocks/forward-compat where State may be populated.
+		if container.State != "" && container.State != "running" {
+			slog.Info("Skipping non-running container", "container_id", container.ID, "state", container.State)
+			skipped++
+			skipLog = append(skipLog, fmt.Sprintf("%s (%s)", shortID(container.ID), container.State))
+			continue
+		}
 
+		slog.Info("Checking container", "container_id", container.ID, "image", container.Image)
 		// Get the current image digest
 		currentDigest, err := r.DockerClient.GetImageDigest(ctx, container.Image)
 		if err != nil {

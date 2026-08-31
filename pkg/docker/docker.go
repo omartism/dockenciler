@@ -29,6 +29,7 @@ type Container struct {
 	ID     string
 	Image  string
 	Labels map[string]string
+	State  string
 }
 
 type ContainerSpec struct {
@@ -149,7 +150,7 @@ func (d *DockerClientImpl) ListContainers(ctx context.Context, labelFilter strin
 	}
 
 	containers, err := d.client.ContainerList(ctx, container.ListOptions{
-		All:     true,
+		All:     false,
 		Filters: filterArgs,
 	})
 	if err != nil {
@@ -162,6 +163,7 @@ func (d *DockerClientImpl) ListContainers(ctx context.Context, labelFilter strin
 			ID:     c.ID,
 			Image:  c.Image,
 			Labels: c.Labels,
+			State:  c.State,
 		}
 	}
 	return result, nil
