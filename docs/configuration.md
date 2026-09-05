@@ -116,12 +116,17 @@ For a GCR service account, set the auth method and file path:
 
 | JSON path | Type | Default | Description |
 |---|---|---|---|
-| `registry.type` | string | `""` | Registry provider: `"ecr"` or `"gcr"` (required) |
+| `registry.type` | string | `""` | Registry provider: `"ecr"`, `"gcr"`, `"dockerhub"` or `"ghcr"` (required) |
 | `registry.ecr.region` | string | `""` | AWS region (required when `registry.type=ecr`) |
 | `registry.ecr.access_key` | string | `""` | AWS access key (leave empty for IMDSv2 instance role) |
 | `registry.ecr.secret_key` | string | `""` | AWS secret key (leave empty for IMDSv2 instance role) |
 | `registry.gcr.auth.method` | string | `"adc"` | GCR auth method: `"adc"` or `"service_account"` |
 | `registry.gcr.auth.service_account_file` | string | `""` | Path to GCP service account JSON key (required when `method=service_account`) |
+| `registry.dockerhub.username` | string | `""` | Docker Hub username (leave empty for anonymous access to public images) |
+| `registry.dockerhub.password` | string | `""` | Docker Hub password or personal access token |
+| `registry.dockerhub.config_path` | string | `""` | Path to Docker CLI `config.json` used as credential fallback |
+| `registry.ghcr.username` | string | `""` | GitHub username (leave empty for anonymous access to public images) |
+| `registry.ghcr.password` | string | `""` | Personal access token with `read:packages` scope (required for private images) |
 | `docker.socket_path` | string | `"/var/run/docker.sock"` | Docker engine socket path |
 | `docker.label_filter` | string | `"dockenciler.autoupdate=true"` | Label selector for containers to watch |
 | `reconcile_interval` | string | `"1h"` | Duration between reconciliation loops. **Binary default: `1h`. Docker image default: `5m` (overridden by `ENV` in `Dockerfile:33`).** |
@@ -155,7 +160,7 @@ For a GCR service account, set the auth method and file path:
 
 ### Config structure notes
 
-- The `registry` block uses **peer pointer fields**: `registry.ecr` and `registry.gcr` are mutually exclusive substructs, not flattened fields. Setting `registry.region` at the top level of the `registry` object has no effect — the binary will exit with `"ECR registry type requires ecr configuration"` (`cmd/dockenciler/main.go:129-131`).
+- The `registry` block uses **peer pointer fields**: `registry.ecr`, `registry.gcr`, `registry.dockerhub` and `registry.ghcr` are mutually exclusive substructs, not flattened fields. Setting `registry.region` at the top level of the `registry` object has no effect — the binary will exit with `"ECR registry type requires ecr configuration"` (`cmd/dockenciler/main.go:129-131`).
 - The `notifications` block at the JSON level maps directly to the `Notifications` struct (`pkg/config/config.go:59-73`). Each notification provider has its own field; the `templates` sub-block is a peer struct (`pkg/config/config.go:75-83`).
 
 ## Environment variables
@@ -168,12 +173,17 @@ This mapping is handled by `v.SetEnvPrefix("")` (`pkg/config/config.go:94`) comb
 
 | Environment variable | JSON path | Description | Default |
 |---|---|---|---|
-| `REGISTRY_TYPE` | `registry.type` | Registry provider: `ecr` or `gcr` | `""` |
+| `REGISTRY_TYPE` | `registry.type` | Registry provider: `ecr`, `gcr`, `dockerhub` or `ghcr` | `""` |
 | `REGISTRY_ECR_REGION` | `registry.ecr.region` | AWS region | `""` |
 | `REGISTRY_ECR_ACCESS_KEY` | `registry.ecr.access_key` | AWS access key (leave empty for IMDSv2) | `""` |
 | `REGISTRY_ECR_SECRET_KEY` | `registry.ecr.secret_key` | AWS secret key | `""` |
 | `REGISTRY_GCR_AUTH_METHOD` | `registry.gcr.auth.method` | GCR auth method: `adc` or `service_account` | `"adc"` |
 | `REGISTRY_GCR_AUTH_SERVICE_ACCOUNT_FILE` | `registry.gcr.auth.service_account_file` | Path to GCP service account JSON key | `""` |
+| `REGISTRY_DOCKERHUB_USERNAME` | `registry.dockerhub.username` | Docker Hub username (leave empty for anonymous access) | `""` |
+| `REGISTRY_DOCKERHUB_PASSWORD` | `registry.dockerhub.password` | Docker Hub password or personal access token | `""` |
+| `REGISTRY_DOCKERHUB_CONFIG_PATH` | `registry.dockerhub.config_path` | Path to Docker CLI `config.json` credential fallback | `""` |
+| `REGISTRY_GHCR_USERNAME` | `registry.ghcr.username` | GitHub username (leave empty for anonymous access) | `""` |
+| `REGISTRY_GHCR_PASSWORD` | `registry.ghcr.password` | Personal access token with `read:packages` scope | `""` |
 
 ### Docker
 

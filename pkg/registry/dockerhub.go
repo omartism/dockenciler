@@ -162,6 +162,12 @@ func (p *DockerHubProvider) GetLatestDigest(ctx context.Context, imageRef string
 	if host == "docker.io" {
 		host = "registry-1.docker.io"
 	}
+	// The Docker Hub token endpoint only issues tokens for Docker Hub
+	// repositories; fail fast on foreign hosts instead of surfacing a
+	// confusing 401/403 from the registry API.
+	if host != "registry-1.docker.io" {
+		return "", fmt.Errorf("image %q is hosted on %q, not Docker Hub; configure the registry type matching the image host (e.g. \"ghcr\" for ghcr.io images)", imageRef, host)
+	}
 	p.mu.Lock()
 	p.cachedHost = host
 	p.mu.Unlock()

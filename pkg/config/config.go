@@ -32,11 +32,17 @@ type DockerHubConfig struct {
 	ConfigPath string `json:"config_path" mapstructure:"config_path"`
 }
 
+type GHCRConfig struct {
+	Username string `json:"username" mapstructure:"username"`
+	Password string `json:"password" mapstructure:"password"`
+}
+
 type Registry struct {
-	Type      string           `json:"type" mapstructure:"type"` // "ecr" | "gcr" | "dockerhub"
+	Type      string           `json:"type" mapstructure:"type"` // "ecr" | "gcr" | "dockerhub" | "ghcr"
 	ECR       *ECRConfig       `json:"ecr,omitempty" mapstructure:"ecr"`
 	GCR       *GCRConfig       `json:"gcr,omitempty" mapstructure:"gcr"`
 	DockerHub *DockerHubConfig `json:"dockerhub,omitempty" mapstructure:"dockerhub"`
+	GHCR      *GHCRConfig      `json:"ghcr,omitempty" mapstructure:"ghcr"`
 }
 
 type Docker struct {
@@ -109,8 +115,8 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetDefault("registry.dockerhub.username", "")
 	v.SetDefault("registry.dockerhub.password", "")
 	v.SetDefault("registry.dockerhub.config_path", "")
-	v.SetDefault("registry.gcr.auth.method", "adc")
-	v.SetDefault("registry.gcr.auth.service_account_file", "")
+	v.SetDefault("registry.ghcr.username", "")
+	v.SetDefault("registry.ghcr.password", "")
 	v.SetDefault("docker.socket_path", "/var/run/docker.sock")
 	v.SetDefault("docker.label_filter", "dockenciler.autoupdate=true")
 	v.SetDefault("reconcile_interval", "1h")

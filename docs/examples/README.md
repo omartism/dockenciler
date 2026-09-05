@@ -14,6 +14,7 @@ This directory contains ready-to-use config file examples. Each file is a comple
 | `advanced-matching.json` | ECR | Static IAM keys | Match on a specific tag (`criteria.version`), with exclusion list |
 | `gcr-adc.json` | GCR | Application Default Credentials | Zero-config GCR (ADC is the default) |
 | `gcr-service-account.json` | GCR | Service account JSON key | Production GCR with explicit credentials |
+| `ghcr-basic.json` | GHCR | Anonymous (public images) | Minimal GHCR config |
 | `multi-notifier.json` | ECR | Static IAM keys | Slack + Telegram + Email with custom templates |
 | `dry-run.json` | ECR | Static IAM keys | Dry-run mode for testing |
 
@@ -48,5 +49,6 @@ For real deployments, replace these placeholders with real values passed via env
 - [Configuration reference](../configuration.md) — full env var and JSON schema reference
 - [ECR provider](../providers/ecr.md)
 - [GCR provider](../providers/gcr.md)
+- [GHCR provider](../providers/ghcr.md)
 - [Notifications](../notifications.md)
 - [Operations](../operations.md)

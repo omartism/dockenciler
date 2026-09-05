@@ -77,6 +77,18 @@ func main() {
 		} else {
 			slog.Info("Docker Hub registry provider initialized (anonymous access)")
 		}
+	case "ghcr":
+		ghProvider, err := newGHCRProvider(ctx, cfg)
+		if err != nil {
+			slog.Error("Failed to create GHCR provider", "error", err)
+			os.Exit(1)
+		}
+		reg = ghProvider
+		if ghProvider.HasCredentials() {
+			slog.Info("GHCR registry provider initialized (authenticated access)")
+		} else {
+			slog.Info("GHCR registry provider initialized (anonymous access)")
+		}
 	default:
 		slog.Error("Unsupported registry type", "type", cfg.Registry.Type)
 		os.Exit(1)
@@ -161,9 +173,19 @@ func newECRProvider(ctx context.Context, cfg *config.Config) (*registry.ECRProvi
 			}),
 		)
 	}
-
 	ecrClient := ecr.NewFromConfig(awsCfg)
 	return registry.NewECRProvider(ecrClient), nil
+}
+
+func newGHCRProvider(_ context.Context, cfg *config.Config) (*registry.GHCRProvider, error) {
+	if cfg.Registry.GHCR == nil {
+		return nil, fmt.Errorf("GHCR registry type requires ghcr configuration")
+	}
+	ghCfg := registry.GHCRConfig{
+		Username: cfg.Registry.GHCR.Username,
+		Password: cfg.Registry.GHCR.Password,
+	}
+	return registry.NewGHCRProvider(&http.Client{Timeout: 30 * time.Second}, ghCfg), nil
 }
 
 func newGCRProvider(ctx context.Context, cfg *config.Config) (*registry.GCRProvider, error) {

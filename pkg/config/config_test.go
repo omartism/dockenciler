@@ -186,6 +186,7 @@ func TestExampleConfigs(t *testing.T) {
 		registryType string
 		needsECR     bool
 		needsGCR     bool
+		needsGHCR    bool
 	}
 	expectations := []expectation{
 		{file: "ecr-basic.json", registryType: "ecr", needsECR: true},
@@ -194,6 +195,7 @@ func TestExampleConfigs(t *testing.T) {
 		{file: "advanced-matching.json", registryType: "ecr", needsECR: true},
 		{file: "gcr-adc.json", registryType: "gcr", needsGCR: true},
 		{file: "gcr-service-account.json", registryType: "gcr", needsGCR: true},
+		{file: "ghcr-basic.json", registryType: "ghcr", needsGHCR: true},
 		{file: "multi-notifier.json", registryType: "ecr", needsECR: true},
 		{file: "dry-run.json", registryType: "ecr", needsECR: true},
 	}
@@ -225,6 +227,12 @@ func TestExampleConfigs(t *testing.T) {
 				assert.Nil(t, cfg.Registry.GCR, "registry.gcr must be nil for %s", exp.file)
 			}
 
+			if exp.needsGHCR {
+				assert.NotNil(t, cfg.Registry.GHCR, "registry.ghcr must be non-nil for %s", exp.file)
+			} else {
+				assert.Nil(t, cfg.Registry.GHCR, "registry.ghcr must be nil for %s", exp.file)
+			}
+
 			// Per-file value assertions — each example must demonstrate its claimed feature.
 			switch exp.file {
 			case "ecr-imds.json":
@@ -236,6 +244,9 @@ func TestExampleConfigs(t *testing.T) {
 			case "gcr-service-account.json":
 				assert.Equal(t, "service_account", cfg.Registry.GCR.Auth.Method)
 				assert.NotEmpty(t, cfg.Registry.GCR.Auth.ServiceAccountFile, "GCR service-account example must include service_account_file path")
+			case "ghcr-basic.json":
+				assert.Empty(t, cfg.Registry.GHCR.Username, "GHCR basic example should use anonymous access")
+				assert.Empty(t, cfg.Registry.GHCR.Password, "GHCR basic example should use anonymous access")
 			case "advanced-matching.json":
 				assert.NotEmpty(t, cfg.Criteria.Version, "advanced-matching example must set criteria.version")
 				assert.Equal(t, 2, len(cfg.Exclusions), "advanced-matching example must have 2 exclusion entries")

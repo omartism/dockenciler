@@ -8,7 +8,7 @@ Dockenciler is a lightweight and efficient open-source Docker reconciler written
 - **Flexible Image Matching**: Update containers based on the `latest` tag, specific version numbers, or custom regular expressions.
 - **Smart Filtering**: Update all containers by default, or target specific containers using the label `dockenciler.autoupdate=true` (customizable via `docker.label_filter`).
 - **Update Strategies**: In-place container recreation (default) or rolling updates in Docker Swarm mode for minimized downtime.
-- **Secure Authentication**: AWS ECR (IAM access keys or IMDSv2 instance role), GCR / Artifact Registry (ADC or service account JSON key), and Docker Hub (anonymous or username/password/pat for public and private images).
+- **Secure Authentication**: AWS ECR (IAM access keys or IMDSv2 instance role), GCR / Artifact Registry (ADC or service account JSON key), Docker Hub (anonymous or username/password/pat for public and private images), and GHCR (anonymous or GitHub username + PAT for public and private images).
 - **Extensive Notifications**: Email, Slack, MS Teams, Google Chat, Telegram, Discord, and local logs — all with customizable Go `text/template` templates.
 - **Safety Rails**: Dry-run mode, self-update exclusion via `dockenciler.instance=true` label, and configurable exclusion lists.
 - **Multiple Configuration Sources**: JSON config file, environment variables (env vars override file), and sensible defaults.
@@ -48,7 +48,7 @@ Dockenciler automatically skips containers labeled `dockenciler.instance=true`, 
 
 ### Configuration
 
-Dockenciler supports three registry providers: AWS ECR, GCR / Artifact Registry, and Docker Hub. Pick one below.
+Dockenciler supports four registry providers: AWS ECR, GCR / Artifact Registry, Docker Hub, and GHCR. Pick one below.
 
 #### ECR (Elastic Container Registry)
 
@@ -157,6 +157,36 @@ Supported image reference formats:
 
 > **Note:** Private Docker Hub repositories are now supported when credentials are configured. If you leave credentials empty, only publicly accessible images can be updated.
 
+#### GHCR (GitHub Container Registry)
+
+**`config.json`:**
+```json
+{
+  "registry": {
+    "type": "ghcr",
+    "ghcr": {
+      "username": "",
+      "password": ""
+    }
+  },
+  "reconcile_interval": "30m",
+  "log_level": "info"
+}
+```
+
+Leave `username` and `password` empty for anonymous access to public images. For private images, set `username` to your GitHub username and `password` to a personal access token with the `read:packages` scope. Credentials are sent as HTTP Basic auth on the token request (`ghcr.io/token`) and reused for Docker daemon pulls. See [GHCR Provider](docs/providers/ghcr.md) for token caching and supported reference formats.
+
+Place secrets in `.env` (copy from `.env.example`):
+
+```bash
+REGISTRY_GHCR_USERNAME=your_github_username
+REGISTRY_GHCR_PASSWORD=your_github_pat  # classic PAT with read:packages scope
+```
+
+Add `dockenciler.autoupdate=true` as a label on any container running a `ghcr.io` image to start automatic updates.
+
+> **Note:** Pointing `registry.type=dockerhub` at a `ghcr.io` image fails fast with an error suggesting the `ghcr` type — the Docker Hub token endpoint cannot issue tokens for GHCR repositories.
+
 Start the container:
 
 ```bash
@@ -251,6 +281,7 @@ See [Notifications](docs/notifications.md) for provider setup guides, template c
 | ECR Provider | IAM keys, IMDSv2, region setup | [docs/providers/ecr.md](docs/providers/ecr.md) |
 | GCR / Artifact Registry | ADC, service account, supported hostnames | [docs/providers/gcr.md](docs/providers/gcr.md) |
 | Docker Hub Provider | Public and private image support, anonymous or authenticated access | [docs/providers/dockerhub.md](docs/providers/dockerhub.md) |
+| GHCR Provider | Public and private image support, anonymous or username + PAT access | [docs/providers/ghcr.md](docs/providers/ghcr.md) |
 | Notifications | Provider setup, templates, field reference | [docs/notifications.md](docs/notifications.md) |
 | Security | Permissions, secrets, Docker socket hardening | [docs/security.md](docs/security.md) |
 | Operations & CI | Logs, dry-run, releases, CI pipeline | [docs/operations.md](docs/operations.md) |

@@ -1,0 +1,11 @@
+{
+  "registry": {
+    "type": "ghcr",
+    "ghcr": {
+      "username": "",
+      "password": ""
+    }
+  },
+  "reconcile_interval": "30m",
+  "log_level": "info"
+}
