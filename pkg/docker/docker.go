@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -26,11 +27,18 @@ import (
 )
 
 type Container struct {
-	ID     string
-	Image  string
-	Labels map[string]string
-	State  string
+	ID    string
+	Image string
+	// ImageID is the resolved running image digest (sha256:…) from inspect.
+	// Empty when the inspect lookup fails.
+	ImageID string
+	Labels  map[string]string
+	State   string
 }
+
+// ErrImageNotFound is returned (wrapped) by GetImageDigest when the daemon
+// has no such image — e.g. the image was pruned after the container started.
+var ErrImageNotFound = errors.New("image not found")
 
 type ContainerSpec struct {
 	Name                     string
@@ -164,6 +172,18 @@ func (d *DockerClientImpl) ListContainers(ctx context.Context, labelFilter strin
 			Image:  c.Image,
 			Labels: c.Labels,
 			State:  c.State,
+		}
+		// The list API reports the raw image ID once the tag the container
+		// was created from moves to a new digest. Prefer the create-time
+		// reference and record the running digest so the reconciler compares
+		// what the container actually runs, not what the tag points at now.
+		if inspected, err := d.client.ContainerInspect(ctx, c.ID); err == nil {
+			if inspected.Config != nil && inspected.Config.Image != "" {
+				result[i].Image = inspected.Config.Image
+			}
+			result[i].ImageID = inspected.Image
+		} else {
+			slog.Debug("Failed to inspect listed container, using list values", "container_id", c.ID, "error", err)
 		}
 	}
 	return result, nil
@@ -655,6 +675,9 @@ func (d *DockerClientImpl) Authenticate(ctx context.Context, username, password,
 func (d *DockerClientImpl) GetImageDigest(ctx context.Context, imageRef string) (string, error) {
 	inspect, _, err := d.client.ImageInspectWithRaw(ctx, imageRef)
 	if err != nil {
+		if client.IsErrNotFound(err) {
+			return "", fmt.Errorf("%w: %s", ErrImageNotFound, imageRef)
+		}
 		return "", err
 	}
 	return inspect.ID, nil

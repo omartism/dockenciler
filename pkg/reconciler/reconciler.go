@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -48,6 +49,20 @@ func convertConfigCriteriaToRegistryCriteria(configCriteria config.Criteria) reg
 		Regex:   configCriteria.Regex,
 		Digest:  configCriteria.Digest,
 	}
+}
+
+// pullWithAuth pulls imageRef using fresh registry credentials (for flows
+// that run before the update path's own authenticate-then-pull sequence,
+// e.g. healing a pruned local image before the digest comparison).
+func (r *Reconciler) pullWithAuth(ctx context.Context, imageRef string) error {
+	auth, err := r.Registry.GetAuth(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get auth from registry: %w", err)
+	}
+	if err := r.DockerClient.Authenticate(ctx, auth.Username, auth.Password, auth.RegistryHost); err != nil {
+		return fmt.Errorf("failed to authenticate with Docker daemon: %w", err)
+	}
+	return r.DockerClient.PullImage(ctx, imageRef)
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context) error {
@@ -106,8 +121,19 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		}
 
 		slog.Info("Checking container", "container_id", container.ID, "image", container.Image)
-		// Get the current image digest
+		// Get the digest of the image tag. When the daemon pruned the image
+		// (e.g. after the tag moved), pull it first so the comparison below
+		// runs against real digests instead of failing the container.
 		currentDigest, err := r.DockerClient.GetImageDigest(ctx, container.Image)
+		if err != nil && errors.Is(err, docker.ErrImageNotFound) {
+			slog.Info("Local image missing, pulling before compare", "container_id", container.ID, "image", container.Image)
+			if perr := r.pullWithAuth(ctx, container.Image); perr != nil {
+				slog.Error("Failed to pull missing image", "container_id", container.ID, "image", container.Image, "error", perr)
+				failed++
+				continue
+			}
+			currentDigest, err = r.DockerClient.GetImageDigest(ctx, container.Image)
+		}
 		if err != nil {
 			slog.Error("Failed to get current image digest", "container_id", container.ID, "image", container.Image, "error", err)
 			failed++
@@ -131,15 +157,18 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 
 		checked++
 
-		// Compare digests
-		if currentDigest == latestDigest {
+		// Compare digests. The tag digest alone is not enough: once a tag
+		// moves, the container may still run the previous image while the
+		// local tag already matches the registry. container.ImageID carries
+		// the running digest (empty when the inspect lookup failed, in which
+		// case fall back to the tag comparison).
+		if currentDigest == latestDigest && (container.ImageID == "" || container.ImageID == currentDigest) {
 			slog.Info("Container is up to date", "container_id", container.ID, "image", container.Image, "digest", currentDigest)
 			upToDate++
 			continue
 		}
 
-		// Digests differ, update required
-		slog.Info("Update required for container", "container_id", container.ID, "image", container.Image, "current_digest", currentDigest, "latest_digest", latestDigest)
+		slog.Info("Update required for container", "container_id", container.ID, "image", container.Image, "running_digest", container.ImageID, "current_digest", currentDigest, "latest_digest", latestDigest)
 
 		// Check if dry-run mode is enabled
 		if r.Config.DryRun {
