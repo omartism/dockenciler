@@ -158,6 +158,14 @@ The provider cleans the path with `filepath.Clean()` and rejects `..` traversal 
 2. **Exclusion list:** Check if the container ID is in the `exclusions` array.
 3. **Criteria regex:** If `criteria.regex` is set, the image tag must match the regex. For example, `^v\\d+\\.\\d+\\.\\d+$` only matches tags like `v1.2.3`, not `latest`.
 4. **Image digest comparison:** If the image is pinned by digest, the reconciler compares digests — a tag push to the registry does not change the digest of that specific digest-pinned image.
+5. **Decayed or pruned image state:** once a tag moves, `docker ps` may show
+   the container's image as a bare `sha256:` ID, and the old image may be
+   pruned (`No such image`). Current versions heal both automatically: the
+   create-time reference is recovered via inspect, and a missing local image
+   is pulled with fresh credentials before comparing (`Local image missing,
+   pulling before compare`). If you see `failed to parse … must start with
+   ghcr.io/` or `No such image` on every tick, upgrade — those are the
+   pre-fix symptoms.
 
 ### "manifest unknown" or "image not found"
 

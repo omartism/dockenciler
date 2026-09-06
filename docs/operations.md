@@ -24,7 +24,7 @@ A typical reconciliation cycle produces:
 "Checking container" "container_id" abc123 "image" "myapp:latest"
 "Container is up to date" "container_id" abc123 "image" "myapp:latest" "digest" sha256:...
 "Checking container" "container_id" def456 "image" "otherapp:latest"
-"Update required for container" "container_id" def456 "current_digest" sha256:old "latest_digest" sha256:new
+"Update required for container" "container_id" def456 "running_digest" sha256:oldrun "current_digest" sha256:old "latest_digest" sha256:new
 "Container updated successfully" "container_id" def456 "image" "otherapp:latest"
 "Reconciliation completed" "total" 3 "checked" 2 "up_to_date" 1 "updated" 1 "skipped" 1 "failed" 0
 ```
@@ -37,6 +37,23 @@ The summary line shows:
 - **skipped**: containers excluded by the exclusion list or self-skip.
 - **failed**: containers where an error occurred (auth failure, pull failure, API error).
 
+### How the update decision works
+
+Each tick compares three digests per container, not two. Docker's list API
+decays a container's `Image` to a raw `sha256:` ID once its tag moves to a
+new digest, so `ListContainers` re-inspects every match: the create-time
+reference (`Config.Image`, e.g. `ghcr.io/owner/repo:staging`) becomes the
+reconcile ref, and the running image ID is recorded alongside it
+(`pkg/docker/docker.go`, `Container.ImageID`).
+
+Up to date means the **running** digest equals the registry digest. The local
+tag digest alone is not enough — after a tag moves, the container may still
+run the previous image while the local tag already matches the registry.
+If the local image was pruned in the meantime, the reconciler pulls it with
+fresh credentials (`Local image missing, pulling before compare`) instead of
+failing the container. Digest-pinned references (`repo@sha256:…`) resolve to
+themselves and therefore never trigger updates.
+
 The startup sequence logs:
 
 1. ASCII "DOCKENCILER" banner.
@@ -48,8 +65,8 @@ The startup sequence logs:
 
 Enable `log_level: "debug"` (or `LOG_LEVEL=debug`) to see:
 
-- Current digest for every container: `"Got current image digest"` (line 109 of reconciler.go).
-- Registry digest for every container: `"Got latest registry digest"` (line 121).
+- Current digest for every container: `"Got current image digest"` (line 144 of reconciler.go).
+- Registry digest for every container: `"Got latest registry digest"` (line 156).
 - Auth credential resolution and cache status.
 - Raw Docker API errors that may be suppressed at `info` level.
 
@@ -75,7 +92,7 @@ When dry-run is active, the reconciler still resolves the current and latest dig
 Dry-run: would update container <id> from_digest <current> to_digest <latest>
 ```
 
-And continues to the next container without calling `GetAuth`, `Authenticate`, `PullImage`, or `RecreateContainer`/`UpdateService` (`pkg/reconciler/reconciler.go:136-139`).
+And continues to the next container without calling `GetAuth`, `Authenticate`, `PullImage`, or `RecreateContainer`/`UpdateService` (dry-run branch at `pkg/reconciler/reconciler.go:175`).
 
 Use dry-run to verify your label filter, exclusion list, and criteria are working correctly before enabling real updates.
 

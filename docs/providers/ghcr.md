@@ -18,6 +18,11 @@ The source is in `pkg/registry/ghcr.go`.
 
 References must start with `ghcr.io/` and include an `owner/repo` path. Anything else (including bare Docker Hub names) is rejected with an error. Conversely, pointing `registry.type=dockerhub` at a `ghcr.io` image fails fast with an error suggesting the `ghcr` type — the Docker Hub token endpoint (`auth.docker.io`) cannot issue tokens for GHCR repositories.
 
+> **Note:** a bare `sha256:` ID never reaches this parser in practice. Once a
+> tag moves, Docker's list API decays the container's image to its ID, but
+> `ListContainers` recovers the create-time reference via inspect before the
+> reconciler calls the provider.
+
 ## Configuration
 
 For public images no credentials are needed. For private images, create a personal access token with the `read:packages` scope ([classic PAT](https://github.com/settings/tokens) or fine-grained) and configure it alongside your GitHub username.
