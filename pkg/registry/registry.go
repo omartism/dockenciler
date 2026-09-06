@@ -1,6 +1,16 @@
 package registry
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrUnsupportedImage marks an image reference that belongs to a different
+// registry than the configured provider (e.g. a Docker Hub image checked by
+// the GHCR provider). Providers wrap it with the offending host; the
+// reconciler treats it as a skip, not a failure, so mixed-registry hosts
+// watched by several single-registry instances stay quiet.
+var ErrUnsupportedImage = errors.New("image not supported by this registry provider")
 
 type Criteria struct {
 	Version string

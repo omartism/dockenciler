@@ -379,7 +379,7 @@ func ghcrParseRef(imageRef string) (host, repoPath, ref string, err error) {
 
 	rest, ok := strings.CutPrefix(imageRef, "ghcr.io/")
 	if !ok {
-		return "", "", "", fmt.Errorf("invalid GHCR image reference %q: must start with ghcr.io/", imageRef)
+		return "", "", "", fmt.Errorf("%w: %q is not a GHCR image (must start with ghcr.io/)", ErrUnsupportedImage, imageRef)
 	}
 
 	// Separate ref (tag or digest) from the rest.

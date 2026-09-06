@@ -147,9 +147,17 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		criteria := convertConfigCriteriaToRegistryCriteria(r.Config.Criteria)
 		latestDigest, err := r.Registry.GetLatestDigest(ctx, container.Image, criteria)
 		if err != nil {
+			// Images from another registry (e.g. Docker Hub images checked
+			// by a GHCR instance) are another instance's job — skip, don't fail.
+			if errors.Is(err, registry.ErrUnsupportedImage) {
+				slog.Info("Skipping image from another registry", "container_id", container.ID, "image", container.Image)
+				skipped++
+				skipLog = append(skipLog, fmt.Sprintf("%s (foreign registry)", shortID(container.ID)))
+				continue
+			}
 			slog.Error("Failed to get latest digest", "container_id", container.ID, "image", container.Image, "error", err)
 			failed++
-			continue // Continue to next container
+			continue
 		}
 
 		// Debug log for latest digest
