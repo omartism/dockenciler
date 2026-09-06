@@ -196,6 +196,7 @@ func TestExampleConfigs(t *testing.T) {
 		{file: "gcr-adc.json", registryType: "gcr", needsGCR: true},
 		{file: "gcr-service-account.json", registryType: "gcr", needsGCR: true},
 		{file: "ghcr-basic.json", registryType: "ghcr", needsGHCR: true},
+		{file: "all-registries.json", registryType: "all", needsGHCR: true},
 		{file: "multi-notifier.json", registryType: "ecr", needsECR: true},
 		{file: "dry-run.json", registryType: "ecr", needsECR: true},
 	}

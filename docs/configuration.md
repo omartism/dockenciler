@@ -112,11 +112,44 @@ For a GCR service account, set the auth method and file path:
 }
 ```
 
+### Multi-registry example
+
+With `"type": "all"`, one instance watches images from every configured
+registry, routed by image host (`ghcr.io` → GHCR, no host or `docker.io` →
+Docker Hub, `*.dkr.ecr.*` → ECR, `gcr.io`/`*.gcr.io`/`*.pkg.dev` → GCR).
+GHCR and Docker Hub providers always build (anonymous when unconfigured);
+ECR and GCR only when their blocks are present. Images from an unconfigured
+or unknown host are skipped via `ErrUnsupportedImage`, not failed.
+
+```json
+{
+  "registry": {
+    "type": "all",
+    "ghcr": {
+      "username": "octocat",
+      "password": "ghp_..."
+    },
+    "dockerhub": {
+      "username": "",
+      "password": ""
+    }
+  },
+  "reconcile_interval": "10m",
+  "log_level": "info"
+}
+```
+
+> **Note:** Docker Hub rate-limits manifest checks (roughly 100 per 6h
+> anonymous, 200 authenticated). Size the shared `reconcile_interval` for the
+> strictest registry you poll — three Hub images at 2m exhaust an anonymous
+> quota in about an hour. A Hub PAT (or a longer interval) keeps polling
+> quiet.
+
 ### Schema reference
 
 | JSON path | Type | Default | Description |
 |---|---|---|---|
-| `registry.type` | string | `""` | Registry provider: `"ecr"`, `"gcr"`, `"dockerhub"` or `"ghcr"` (required) |
+| `registry.type` | string | `""` | Registry provider: `"ecr"`, `"gcr"`, `"dockerhub"`, `"ghcr"` or `"all"` (required; `"all"` routes each image to its registry's provider) |
 | `registry.ecr.region` | string | `""` | AWS region (required when `registry.type=ecr`) |
 | `registry.ecr.access_key` | string | `""` | AWS access key (leave empty for IMDSv2 instance role) |
 | `registry.ecr.secret_key` | string | `""` | AWS secret key (leave empty for IMDSv2 instance role) |
@@ -173,7 +206,7 @@ This mapping is handled by `v.SetEnvPrefix("")` (`pkg/config/config.go:94`) comb
 
 | Environment variable | JSON path | Description | Default |
 |---|---|---|---|
-| `REGISTRY_TYPE` | `registry.type` | Registry provider: `ecr`, `gcr`, `dockerhub` or `ghcr` | `""` |
+| `REGISTRY_TYPE` | `registry.type` | Registry provider: `ecr`, `gcr`, `dockerhub`, `ghcr` or `all` | `""` |
 | `REGISTRY_ECR_REGION` | `registry.ecr.region` | AWS region | `""` |
 | `REGISTRY_ECR_ACCESS_KEY` | `registry.ecr.access_key` | AWS access key (leave empty for IMDSv2) | `""` |
 | `REGISTRY_ECR_SECRET_KEY` | `registry.ecr.secret_key` | AWS secret key | `""` |

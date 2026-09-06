@@ -55,7 +55,7 @@ func convertConfigCriteriaToRegistryCriteria(configCriteria config.Criteria) reg
 // that run before the update path's own authenticate-then-pull sequence,
 // e.g. healing a pruned local image before the digest comparison).
 func (r *Reconciler) pullWithAuth(ctx context.Context, imageRef string) error {
-	auth, err := r.Registry.GetAuth(ctx)
+	auth, err := r.registryAuth(ctx, imageRef)
 	if err != nil {
 		return fmt.Errorf("failed to get auth from registry: %w", err)
 	}
@@ -63,6 +63,18 @@ func (r *Reconciler) pullWithAuth(ctx context.Context, imageRef string) error {
 		return fmt.Errorf("failed to authenticate with Docker daemon: %w", err)
 	}
 	return r.DockerClient.PullImage(ctx, imageRef)
+}
+
+// registryAuth returns credentials for the registry behind imageRef. A Router
+// serves per-image auth via GetAuthFor; single providers use the legacy
+// imageless GetAuth.
+func (r *Reconciler) registryAuth(ctx context.Context, imageRef string) (registry.Auth, error) {
+	if router, ok := r.Registry.(interface {
+		GetAuthFor(context.Context, string) (registry.Auth, error)
+	}); ok {
+		return router.GetAuthFor(ctx, imageRef)
+	}
+	return r.Registry.GetAuth(ctx)
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context) error {
@@ -185,7 +197,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		}
 
 		// Get auth credentials from registry
-		auth, err := r.Registry.GetAuth(ctx)
+		auth, err := r.registryAuth(ctx, container.Image)
 		if err != nil {
 			slog.Error("Failed to get auth from registry", "container_id", container.ID, "image", container.Image, "error", err)
 			failed++
@@ -215,7 +227,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 				r.Registry.InvalidateCache()
 
 				// Re-fetch auth
-				auth2, err2 := r.Registry.GetAuth(ctx)
+				auth2, err2 := r.registryAuth(ctx, container.Image)
 				if err2 != nil {
 					slog.Error("Failed to re-fetch auth from registry", "container_id", container.ID, "image", container.Image, "error", err2)
 					failed++

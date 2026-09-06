@@ -89,6 +89,14 @@ func main() {
 		} else {
 			slog.Info("GHCR registry provider initialized (anonymous access)")
 		}
+	case "all":
+		router, names := newRouter(ctx, cfg)
+		if router == nil {
+			slog.Error("Failed to build ECR/GCR providers for multi-registry router")
+			os.Exit(1)
+		}
+		reg = router
+		slog.Info("Multi-registry router initialized", "providers", names)
 	default:
 		slog.Error("Unsupported registry type", "type", cfg.Registry.Type)
 		os.Exit(1)
@@ -186,6 +194,52 @@ func newGHCRProvider(_ context.Context, cfg *config.Config) (*registry.GHCRProvi
 		Password: cfg.Registry.GHCR.Password,
 	}
 	return registry.NewGHCRProvider(&http.Client{Timeout: 30 * time.Second}, ghCfg), nil
+}
+
+// newRouter builds one provider per configured registry block and routes
+// images by host. GHCR and Docker Hub providers always build (anonymous when
+// unconfigured); ECR and GCR only when their blocks are present. Returns a
+// nil router when a configured ECR/GCR provider fails to build.
+func newRouter(ctx context.Context, cfg *config.Config) (*registry.Router, []string) {
+	ghCfg := registry.GHCRConfig{}
+	if cfg.Registry.GHCR != nil {
+		ghCfg.Username = cfg.Registry.GHCR.Username
+		ghCfg.Password = cfg.Registry.GHCR.Password
+	}
+	dhCfg := registry.DockerHubConfig{}
+	if cfg.Registry.DockerHub != nil {
+		dhCfg.Username = cfg.Registry.DockerHub.Username
+		dhCfg.Password = cfg.Registry.DockerHub.Password
+		dhCfg.ConfigPath = cfg.Registry.DockerHub.ConfigPath
+	}
+	var (
+		ecrP *registry.ECRProvider
+		gcrP *registry.GCRProvider
+		names []string
+	)
+	if cfg.Registry.ECR != nil {
+		var err error
+		ecrP, err = newECRProvider(ctx, cfg)
+		if err != nil {
+			return nil, nil
+		}
+		names = append(names, "ecr")
+	}
+	if cfg.Registry.GCR != nil {
+		var err error
+		gcrP, err = newGCRProvider(ctx, cfg)
+		if err != nil {
+			return nil, nil
+		}
+		names = append(names, "gcr")
+	}
+	names = append(names, "ghcr", "dockerhub")
+	return registry.NewRouter(
+		registry.NewGHCRProvider(&http.Client{Timeout: 30 * time.Second}, ghCfg),
+		registry.NewDockerHubProvider(&http.Client{Timeout: 30 * time.Second}, dhCfg),
+		ecrP,
+		gcrP,
+	), names
 }
 
 func newGCRProvider(ctx context.Context, cfg *config.Config) (*registry.GCRProvider, error) {

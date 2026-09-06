@@ -34,7 +34,7 @@ The summary line shows:
 - **checked**: containers where digest comparison ran (excludes skipped and self-skip).
 - **up_to_date**: containers already on the latest digest.
 - **updated**: containers that were successfully recreated or service-updated.
-- **skipped**: containers excluded by the exclusion list or self-skip.
+- **skipped**: containers excluded by the exclusion list, self-skip, or images from another registry than the configured provider (`ErrUnsupportedImage` — another instance's job).
 - **failed**: containers where an error occurred (auth failure, pull failure, API error).
 
 ### How the update decision works

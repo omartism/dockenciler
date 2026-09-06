@@ -48,7 +48,7 @@ Dockenciler automatically skips containers labeled `dockenciler.instance=true`, 
 
 ### Configuration
 
-Dockenciler supports four registry providers: AWS ECR, GCR / Artifact Registry, Docker Hub, and GHCR. Pick one below.
+Dockenciler supports four registry providers: AWS ECR, GCR / Artifact Registry, Docker Hub, and GHCR. Pick one below — or use `"type": "all"` to watch images from every configured registry in a single instance (routed by image host; see [Multi-registry example](docs/configuration.md#multi-registry-example)).
 
 #### ECR (Elastic Container Registry)
 

@@ -1,0 +1,15 @@
+{
+  "registry": {
+    "type": "all",
+    "ghcr": {
+      "username": "",
+      "password": ""
+    },
+    "dockerhub": {
+      "username": "",
+      "password": ""
+    }
+  },
+  "reconcile_interval": "10m",
+  "log_level": "info"
+}

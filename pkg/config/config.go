@@ -38,7 +38,7 @@ type GHCRConfig struct {
 }
 
 type Registry struct {
-	Type      string           `json:"type" mapstructure:"type"` // "ecr" | "gcr" | "dockerhub" | "ghcr"
+	Type      string           `json:"type" mapstructure:"type"` // "ecr" | "gcr" | "dockerhub" | "ghcr" | "all"
 	ECR       *ECRConfig       `json:"ecr,omitempty" mapstructure:"ecr"`
 	GCR       *GCRConfig       `json:"gcr,omitempty" mapstructure:"gcr"`
 	DockerHub *DockerHubConfig `json:"dockerhub,omitempty" mapstructure:"dockerhub"`

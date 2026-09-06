@@ -15,6 +15,7 @@ This directory contains ready-to-use config file examples. Each file is a comple
 | `gcr-adc.json` | GCR | Application Default Credentials | Zero-config GCR (ADC is the default) |
 | `gcr-service-account.json` | GCR | Service account JSON key | Production GCR with explicit credentials |
 | `ghcr-basic.json` | GHCR | Anonymous (public images) | Minimal GHCR config |
+| `all-registries.json` | GHCR + Docker Hub | Anonymous (public images) | One instance watching both registries |
 | `multi-notifier.json` | ECR | Static IAM keys | Slack + Telegram + Email with custom templates |
 | `dry-run.json` | ECR | Static IAM keys | Dry-run mode for testing |
 
