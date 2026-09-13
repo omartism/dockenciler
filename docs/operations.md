@@ -142,6 +142,10 @@ This is a known limitation. The version string is logged at startup:
 
 The project uses GitHub Actions for continuous integration and release automation. All workflow files are in `.github/workflows/`.
 
+### Dev images (automatic)
+
+Every push to `main` builds a multi-arch image (`linux/amd64` + `linux/arm64`) and pushes it to **GHCR** (`ghcr.io/<owner>/dockenciler`) with the tags `alpha` (floating) and `sha-<commit>` (immutable, for pinning/rollback). No manual tagging needed — just `git push origin main`. PRs build but do not push.
+
 ### Release flow
 
 A GitHub Release is triggered by pushing a tag matching `v*`. The release pipeline has two sequential jobs:
@@ -153,25 +157,27 @@ A GitHub Release is triggered by pushing a tag matching `v*`. The release pipeli
    - Image is pushed to **GHCR** (`ghcr.io/<owner>/dockenciler`).
    - A GitHub Release is created with auto-generated release notes.
 
-The `docker/metadata-action@v5` in `release.yml` derives the image tags from the Git tag.
+The `docker/metadata-action@v5` in `ci.yml` derives the image tags from the Git ref.
 
 #### Image tag conventions
 
-| Git tag | GHCR tags created |
+| Git ref | GHCR tags created |
 |---|---|
+| push to `main` | `alpha` (floating), `sha-<commit>` |
 | `v1.2.3` | `1.2.3`, `1.2`, `1`, `stable`, `latest` |
 | `v1.2.3-alpha.1` | `alpha` (floating) |
 | `v1.2.3-beta.2` | `beta` (floating) |
 | `v1.2.3-rc.3` | `rc` (floating) |
 
-The `stable` and `latest` tags are only created for full releases (tags without a pre-release suffix). Pre-release floating tags (`alpha`, `beta`, `rc`) overwrite on each new pre-release push.
+The `stable` and `latest` tags are only created for full releases (tags without a pre-release suffix) — never from `main` pushes. Pre-release floating tags (`alpha`, `beta`, `rc`) overwrite on each new pre-release push.
 
 ### CI workflows
 
 | Workflow | File | Trigger | What it does |
-|---|---|---|---|---|
-| Unit Tests | `test.yml` | PRs to `main`/`master` | `go test -race -v ./...` + `go vet ./...` (Go 1.24) |
-| Release | `release.yml` | Push of `v*` tag | Trivy scan → multi-arch build → GHCR push to `ghcr.io/omartism/dockenciler` → GitHub Release |
+|---|---|---|---|
+| Unit Tests | `ci.yml` | PRs, pushes to `main`, pushes of `v*` tags | `go test -race -v ./...` + `go vet ./...` (Go 1.26) |
+| Release | `ci.yml` | Push of `v*` tag | Trivy scan → multi-arch build → GHCR push to `ghcr.io/omartism/dockenciler` → GitHub Release |
+| Dev image | `ci.yml` | Push to `main` | Multi-arch build → GHCR push (`alpha`, `sha-<commit>`) |
 | CodeQL | `codeql.yml` | PR to `main` | GitHub CodeQL security analysis (`language: go`) |
 | Labeler | `labeler.yml` | PR / Issue opened | Auto-labels PRs and issues by keyword matching |
 | Stale | `stale.yml` | Cron (daily) | Marks stale issues and PRs with `no-issue-activity` / `no-pr-activity` |

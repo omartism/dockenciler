@@ -279,8 +279,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			if err == nil && serviceID != "" {
 				// Use service update for rolling update
 				serviceSpec := docker.ServiceSpec{}
-				serviceSpec.TaskTemplate.ContainerSpec.Image = container.Image
-				slog.Info("Updating service for rolling update", "container_id", container.ID, "service_id", serviceID)
+				// Recreate/update with the freshly pulled tag, not the create-time
+				// ref: container.Image may carry a stale @sha256 pin that would
+				// resurrect the old image.
+				serviceSpec.TaskTemplate.ContainerSpec.Image = imageRef
 				if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
 					slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "error", err)
 					// Fall back to container recreation on error
@@ -292,7 +294,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 
 		// If not in swarm mode, no service ID found, or service update failed, recreate container
 		if !containerUpdated {
-			if err := r.DockerClient.RecreateContainer(ctx, container.ID, spec, container.Image); err != nil {
+			if err := r.DockerClient.RecreateContainer(ctx, container.ID, spec, imageRef); err != nil {
 				// Check if the error is because the container is managed by swarm
 				if err == docker.ErrContainerManagedBySwarm {
 					slog.Info("Container is managed by swarm, attempting service update", "container_id", container.ID)
@@ -301,7 +303,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 					if err == nil && serviceID != "" {
 						slog.Info("Updating service for swarm-managed container", "container_id", container.ID, "service_id", serviceID)
 						serviceSpec := docker.ServiceSpec{}
-						serviceSpec.TaskTemplate.ContainerSpec.Image = container.Image
+						serviceSpec.TaskTemplate.ContainerSpec.Image = imageRef
 						if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
 							slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "error", err)
 							failed++

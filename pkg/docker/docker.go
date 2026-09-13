@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -320,8 +322,50 @@ func (d *DockerClientImpl) PullImage(ctx context.Context, imageRef string) error
 		pullOptions.RegistryAuth = encodedAuth
 	}
 
-	_, err := d.client.ImagePull(ctx, imageRef, pullOptions)
-	return err
+	rc, err := d.client.ImagePull(ctx, imageRef, pullOptions)
+	if err != nil {
+		return err
+	}
+	if rc == nil {
+		return nil
+	}
+	defer rc.Close()
+	// The daemon only completes the pull once the progress stream is
+	// fully consumed. Discarding the body aborts the pull, leaving the
+	// local tag on the old digest so the recreated container runs stale
+	// code. Drain the stream and surface logical errors the daemon
+	// reports inline as {"error": "..."} with a 200 status.
+	var pullErr string
+	scanner := bufio.NewScanner(rc)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var msg struct {
+			Error       string `json:"error"`
+			ErrorDetail struct {
+				Message string `json:"message"`
+			} `json:"errorDetail"`
+		}
+		if err := json.Unmarshal(line, &msg); err != nil {
+			continue
+		}
+		switch {
+		case msg.Error != "":
+			pullErr = msg.Error
+		case msg.ErrorDetail.Message != "":
+			pullErr = msg.ErrorDetail.Message
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to read pull output for %s: %w", imageRef, err)
+	}
+	if pullErr != "" {
+		return fmt.Errorf("failed to pull image %s: %s", imageRef, pullErr)
+	}
+	return nil
 }
 
 func (d *DockerClientImpl) RecreateContainer(ctx context.Context, id string, spec ContainerSpec, newImage string) error {
