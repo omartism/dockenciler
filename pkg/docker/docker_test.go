@@ -34,6 +34,7 @@ type mockDockerClient struct {
 	ContainerStartFunc        func(context.Context, string, container.StartOptions) error
 	RegistryLoginFunc         func(context.Context, registry.AuthConfig) (registry.AuthenticateOKBody, error)
 	ImageInspectWithRawFunc   func(context.Context, string) (types.ImageInspect, []byte, error)
+	ImageRemoveFunc           func(context.Context, string, image.RemoveOptions) ([]image.DeleteResponse, error)
 }
 
 func (m *mockDockerClient) Info(ctx context.Context) (system.Info, error) {
@@ -111,6 +112,13 @@ func (m *mockDockerClient) ImageInspectWithRaw(ctx context.Context, ref string) 
 		return m.ImageInspectWithRawFunc(ctx, ref)
 	}
 	return types.ImageInspect{}, nil, nil
+}
+
+func (m *mockDockerClient) ImageRemove(ctx context.Context, imageID string, options image.RemoveOptions) ([]image.DeleteResponse, error) {
+	if m.ImageRemoveFunc != nil {
+		return m.ImageRemoveFunc(ctx, imageID, options)
+	}
+	return nil, nil
 }
 
 func TestIsSwarmMode(t *testing.T) {

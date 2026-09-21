@@ -48,6 +48,10 @@ type Registry struct {
 type Docker struct {
 	SocketPath  string `json:"socket_path" mapstructure:"socket_path"`
 	LabelFilter string `json:"label_filter" mapstructure:"label_filter"`
+	// CleanupOldImages removes the images an update superseded once the
+	// replacement container is running. Docker refuses the removal when
+	// another container still references the image, so shared images survive.
+	CleanupOldImages bool `json:"cleanup_old_images" mapstructure:"cleanup_old_images"`
 }
 
 type Criteria struct {
@@ -119,6 +123,7 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetDefault("registry.ghcr.password", "")
 	v.SetDefault("docker.socket_path", "/var/run/docker.sock")
 	v.SetDefault("docker.label_filter", "dockenciler.autoupdate=true")
+	v.SetDefault("docker.cleanup_old_images", true)
 	v.SetDefault("reconcile_interval", "1h")
 	v.SetDefault("log_level", "info")
 	v.SetDefault("dry_run", false)

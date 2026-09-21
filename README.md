@@ -8,6 +8,7 @@ Dockenciler is a lightweight and efficient open-source Docker reconciler written
 - **Flexible Image Matching**: Update containers based on the `latest` tag, specific version numbers, or custom regular expressions.
 - **Smart Filtering**: Update all containers by default, or target specific containers using the label `dockenciler.autoupdate=true` (customizable via `docker.label_filter`).
 - **Update Strategies**: In-place container recreation (default) or rolling updates in Docker Swarm mode for minimized downtime.
+- **Image Cleanup**: The image an update replaced is removed once the new container runs, so superseded digests don't accumulate. Docker refuses the removal while another container still references the image; disable with `docker.cleanup_old_images: false`.
 - **Secure Authentication**: AWS ECR (IAM access keys or IMDSv2 instance role), GCR / Artifact Registry (ADC or service account JSON key), Docker Hub (anonymous or username/password/pat for public and private images), and GHCR (anonymous or GitHub username + PAT for public and private images).
 - **Extensive Notifications**: Email, Slack, MS Teams, Google Chat, Telegram, Discord, and local logs — all with customizable Go `text/template` templates.
 - **Safety Rails**: Dry-run mode, self-update exclusion via `dockenciler.instance=true` label, and configurable exclusion lists.

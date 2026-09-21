@@ -53,6 +53,7 @@ type MockDockerClient struct {
 	RecreateContainerFunc func(ctx context.Context, id string, spec docker.ContainerSpec, newImage string) error
 	UpdateServiceFunc     func(ctx context.Context, serviceID string, spec docker.ServiceSpec) error
 	GetImageDigestFunc    func(ctx context.Context, imageRef string) (string, error)
+	RemoveImageFunc       func(ctx context.Context, imageID string) error
 	AuthenticateFunc      func(ctx context.Context, username, password, registryHost string) error
 	IsSwarmModeFunc       func(ctx context.Context) (bool, error)
 	GetServiceIDFunc      func(ctx context.Context, containerID string) (string, error)
@@ -112,6 +113,13 @@ func (m *MockDockerClient) IsSwarmMode(ctx context.Context) (bool, error) {
 		return m.IsSwarmModeFunc(ctx)
 	}
 	return false, nil
+}
+
+func (m *MockDockerClient) RemoveImage(ctx context.Context, imageID string) error {
+	if m.RemoveImageFunc != nil {
+		return m.RemoveImageFunc(ctx, imageID)
+	}
+	return nil
 }
 
 func (m *MockDockerClient) GetServiceID(ctx context.Context, containerID string) (string, error) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ type Reconciler struct {
 		RecreateContainer(ctx context.Context, id string, spec docker.ContainerSpec, newImage string) error
 		UpdateService(ctx context.Context, serviceID string, spec docker.ServiceSpec) error
 		GetImageDigest(ctx context.Context, imageRef string) (string, error)
+		RemoveImage(ctx context.Context, imageID string) error
 		IsSwarmMode(ctx context.Context) (bool, error)
 		GetServiceID(ctx context.Context, containerID string) (string, error)
 		Authenticate(ctx context.Context, username, password, registryHost string) error
@@ -272,7 +274,13 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			isSwarm = false
 		}
 
-		var containerUpdated bool
+		var (
+			containerUpdated bool
+			// recreatedLocally is true only for an in-place container swap. A
+			// swarm service rollout is asynchronous and its previous image may
+			// still be needed by other tasks, so it must not be reclaimed here.
+			recreatedLocally bool
+		)
 		if isSwarm {
 			// Try to get the service ID for this container
 			serviceID, err := r.DockerClient.GetServiceID(ctx, container.ID)
@@ -319,6 +327,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 					failed++
 					continue // Continue to next container
 				}
+			} else {
+				recreatedLocally = true
 			}
 		}
 
@@ -339,6 +349,23 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			// Continue even if notification fails
 		}
 
+		// The replacement container is running, so the images this update
+		// superseded are no longer referenced by it: drop them here rather
+		// than letting them accumulate until something sweeps the daemon.
+		if recreatedLocally && r.Config.Docker.CleanupOldImages {
+			// Keep whatever the local tag now resolves to. That is the only
+			// ID that names the image the new container runs — the registry
+			// digest is a different kind of digest for multi-platform images,
+			// so it cannot stand in for it.
+			keep := []string{latestDigest}
+			if newLocalID, err := r.DockerClient.GetImageDigest(ctx, container.Image); err != nil {
+				slog.Debug("Could not resolve the pulled image id, keeping the registry digest only", "container_id", container.ID, "image", container.Image, "error", err)
+			} else {
+				keep = append(keep, newLocalID)
+			}
+			r.cleanupSupersededImages(ctx, container.ID, []string{container.ImageID, currentDigest}, keep)
+		}
+
 		slog.Info("Container updated successfully", "container_id", container.ID, "image", container.Image)
 		updated++
 	}
@@ -356,6 +383,36 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		slog.Info("Skipped containers", "containers", fmt.Sprintf("[%s]", joinStrings(skipLog, ", ")))
 	}
 	return nil
+}
+
+// cleanupSupersededImages removes the images an update replaced — the candidates:
+// the one the old container was running and the one the tag pointed at before
+// the pull (a local tag can already have moved ahead of the container's running
+// image, in which case those differ). Any ID in keep is preserved.
+//
+// Docker refuses the removal on its own while any container still references the
+// image, and this is best-effort regardless: a removal failure is logged, never
+// fatal, so cleanup can't turn a successful update into a failed one.
+func (r *Reconciler) cleanupSupersededImages(ctx context.Context, containerID string, candidates, keep []string) {
+	seen := make(map[string]struct{}, len(candidates))
+	for _, imageID := range candidates {
+		if imageID == "" {
+			continue
+		}
+		if _, dup := seen[imageID]; dup {
+			continue
+		}
+		seen[imageID] = struct{}{}
+		if slices.Contains(keep, imageID) {
+			continue
+		}
+
+		if err := r.DockerClient.RemoveImage(ctx, imageID); err != nil {
+			slog.Warn("Failed to remove superseded image", "container_id", containerID, "image_id", imageID, "error", err)
+			continue
+		}
+		slog.Info("Removed superseded image", "container_id", containerID, "image_id", imageID)
+	}
 }
 
 // shortID returns the first 12 characters of a container ID for compact display.

@@ -117,6 +117,7 @@ type DockerClient interface {
 	IsSwarmMode(ctx context.Context) (bool, error)
 	Authenticate(ctx context.Context, username, password, registryHost string) error
 	GetImageDigest(ctx context.Context, imageRef string) (string, error)
+	RemoveImage(ctx context.Context, imageID string) error
 	GetServiceID(ctx context.Context, containerID string) (string, error)
 }
 
@@ -137,6 +138,7 @@ type DockerAPIClient interface {
 	Info(ctx context.Context) (system.Info, error)
 	RegistryLogin(ctx context.Context, authConfig registry.AuthConfig) (registry.AuthenticateOKBody, error)
 	ImageInspectWithRaw(ctx context.Context, ref string) (types.ImageInspect, []byte, error)
+	ImageRemove(ctx context.Context, imageID string, options image.RemoveOptions) ([]image.DeleteResponse, error)
 }
 
 type DockerClientImpl struct {
@@ -725,6 +727,28 @@ func (d *DockerClientImpl) GetImageDigest(ctx context.Context, imageRef string) 
 		return "", err
 	}
 	return inspect.ID, nil
+}
+
+// RemoveImage deletes an image by ID, untagging any references to it. An image
+// that is already gone is not an error: the caller's intent — no local copy
+// left behind — is satisfied either way.
+//
+// Force is deliberately false so the daemon refuses (with a conflict) while a
+// container still references the image; that keeps a shared or still-running
+// image safe. PruneChildren lets the daemon drop untagged parent images that
+// would otherwise make the removal fail outright.
+func (d *DockerClientImpl) RemoveImage(ctx context.Context, imageID string) error {
+	if imageID == "" {
+		return nil
+	}
+	_, err := d.client.ImageRemove(ctx, imageID, image.RemoveOptions{PruneChildren: true})
+	if err != nil {
+		if client.IsErrNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (d *DockerClientImpl) GetServiceID(ctx context.Context, containerID string) (string, error) {

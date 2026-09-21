@@ -61,6 +61,23 @@ The startup sequence logs:
 3. Initial reconciliation result.
 4. Periodic reconciliation summaries at the configured interval.
 
+### Superseded image cleanup
+
+An update leaves two images behind: the one the old container was running and
+the one the local tag pointed at before the pull. Once the replacement
+container is running, both are removed (`Removed superseded image`, one log
+line per image). Removal happens only after the new container starts, so a
+failed recreation never costs you the image you were running, and Docker
+refuses to delete an image any container still references — a shared image
+survives, with the refusal logged at `warn` (`Failed to remove superseded
+image`) without failing the update.
+
+Swarm service rollouts are exempt: their previous image may still be needed by
+other tasks, so only local container recreation triggers cleanup.
+
+Disable with `docker.cleanup_old_images: false` (`DOCKER_CLEANUP_OLD_IMAGES=false`)
+to keep superseded images cached for manual rollback.
+
 ### Debug logging
 
 Enable `log_level: "debug"` (or `LOG_LEVEL=debug`) to see:

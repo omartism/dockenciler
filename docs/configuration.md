@@ -162,6 +162,7 @@ or unknown host are skipped via `ErrUnsupportedImage`, not failed.
 | `registry.ghcr.password` | string | `""` | Personal access token with `read:packages` scope (required for private images) |
 | `docker.socket_path` | string | `"/var/run/docker.sock"` | Docker engine socket path |
 | `docker.label_filter` | string | `"dockenciler.autoupdate=true"` | Label selector for containers to watch |
+| `docker.cleanup_old_images` | bool | `true` | Remove the images an update replaced (the running image and the pre-pull tag target) once the replacement container is running. Applies to local container recreation only, never to swarm service rollouts, and the Docker daemon refuses the removal while another container still references the image. Set to `false` to keep superseded images for manual rollback. |
 | `reconcile_interval` | string | `"1h"` | Duration between reconciliation loops. **Binary default: `1h`. Docker image default: `5m` (overridden by `ENV` in `Dockerfile:33`).** |
 | `log_level` | string | `"info"` | Log level: `debug`, `info`, `warn`, `error` |
 | `color_logs` | bool | `true` | Enable colorized log output (TTY only) |
@@ -224,6 +225,7 @@ This mapping is handled by `v.SetEnvPrefix("")` (`pkg/config/config.go:94`) comb
 |---|---|---|---|
 | `DOCKER_SOCKET_PATH` | `docker.socket_path` | Docker engine socket path | `"/var/run/docker.sock"` |
 | `DOCKER_LABEL_FILTER` | `docker.label_filter` | Label selector for containers to watch | `"dockenciler.autoupdate=true"` |
+| `DOCKER_CLEANUP_OLD_IMAGES` | `docker.cleanup_old_images` | Remove superseded images after a successful update | `true` |
 
 ### Application
 
