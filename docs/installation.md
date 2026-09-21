@@ -120,6 +120,8 @@ docker stack deploy -c dockenciler-stack.yml dockenciler
 
 > **Note:** The `node.role == manager` placement constraint is required because Dockenciler needs access to the Docker API to manage services and containers. Manager nodes have this access by default.
 
+> **Note:** Service rollouts never remove the previous image — a task on another node may still need it — so `docker.cleanup_old_images` does not apply to Swarm updates. Reclaim superseded images on the nodes with `docker image prune` after the rollout completes.
+
 ## Binary
 
 You can build and run Dockenciler as a standalone binary. This is useful for testing or running outside Docker.

@@ -10,8 +10,11 @@ Dockenciler runs as a long-lived process. On a configurable interval (default 1 
 2. For each matching container, resolves the current image digest from the registry.
 3. Compares it with the digest of the running image.
 4. If they differ, authenticates to the registry, pulls the new image, and recreates the container with the same configuration (name, ports, volumes, networks, environment).
+5. Removes the images the update superseded, so replaced digests do not accumulate on the host (`docker.cleanup_old_images`, default `true`).
 
 The reconciliation loop runs once on startup and then on a ticker at the configured interval (`pkg/reconciler/reconciler.go`). Dockenciler skips its own container (label `dockenciler.instance=true`), respects an exclusion list, and supports a dry-run mode that logs planned updates without executing them.
+
+Superseded images are removed only for an in-place container recreation, and only after the replacement container has started. The Docker daemon refuses to delete an image that any container still references, so images shared with other containers survive — the refusal is logged (`Failed to remove superseded image`) without failing the update. Swarm service rollouts are exempt, because their previous image may still be needed by other tasks. Set `docker.cleanup_old_images: false` to keep superseded images cached for manual rollback.
 
 The process architecture is defined in `cmd/dockenciler/main.go`: signal handler → config loader → logger → Docker client → registry provider → notifier → reconciler → ticker loop. Each component is a self-contained package under `pkg/`.
 

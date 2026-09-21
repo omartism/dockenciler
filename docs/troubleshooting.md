@@ -210,6 +210,41 @@ Enable debug logging to see the full startup sequence:
 LOG_LEVEL=debug
 ```
 
+## Disk usage
+
+### Superseded images are not being removed
+
+**Symptom:** `docker images` grows with `<none>` entries (and full image copies) after every update, or an image you updated away from is still to blame for disk pressure.
+
+**How it works:** each successful in-place update removes the images it replaced — the image the old container was running and the image the local tag pointed at before the pull. Successful removals log `"Removed superseded image"` with the image ID. If nothing is logged at all, check:
+
+1. **Cleanup disabled:** `docker.cleanup_old_images` (or `DOCKER_CLEANUP_OLD_IMAGES`) is `false`. It defaults to `true`.
+2. **Swarm service rollout:** updates made through the Swarm API never remove images, because the previous image may still be needed by other tasks. Clean those up on the nodes with `docker image prune`.
+3. **Dry-run mode:** `dry_run` never pulls, recreates, or removes anything.
+
+### "Failed to remove superseded image"
+
+**Log line:** `"Failed to remove superseded image"` with `error="conflict: unable to delete <id> (cannot be forced) - image is being used by running container <id>"`.
+
+**Cause:** the image still has a reference, and Dockenciler deliberately does not force removal. Either a container outside Dockenciler's label filter uses it, or another container was created from the same image. The update itself succeeded — the log entry is a `warn`, not a failure.
+
+**Resolution:** none required; once the last referencing container is recreated or removed, that image becomes unreferenced. To reclaim it manually, remove the container first:
+
+```bash
+docker ps -a --filter ancestor=<image-id>   # find remaining users
+docker image rm <image-id>
+```
+
+### Removing old images is not desired
+
+The image a container was just updated away from is deleted as soon as the replacement starts, so a manual rollback to the previous digest requires a re-pull. To keep the previous image cached:
+
+```bash
+DOCKER_CLEANUP_OLD_IMAGES=false
+```
+
+Trade-off: disk usage grows by one image per update for each watched container.
+
 ## Getting help
 
 If the troubleshooting steps above do not resolve your issue, open a GitHub issue at:

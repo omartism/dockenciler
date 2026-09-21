@@ -24,7 +24,7 @@ There is no `--version`, `--help`, or `--config` flag. The version string is har
 
 ## JSON config file
 
-The full config schema is defined in `pkg/config/config.go:14-83`. Below is a complete example with all available fields.
+The full config schema is defined in `pkg/config/config.go:14-100`. Below is a complete example with all available fields.
 
 ### Complete ECR example
 
@@ -40,7 +40,8 @@ The full config schema is defined in `pkg/config/config.go:14-83`. Below is a co
   },
   "docker": {
     "socket_path": "/var/run/docker.sock",
-    "label_filter": "dockenciler.autoupdate=true"
+    "label_filter": "dockenciler.autoupdate=true",
+    "cleanup_old_images": true
   },
   "reconcile_interval": "30m",
   "log_level": "info",
@@ -321,7 +322,7 @@ If your `config.json` contains only:
 }
 ```
 
-All unspecified fields use their defaults from `pkg/config/config.go:97-129` — `reconcile_interval` defaults to `"1h"` (binary), `log_level` to `"info"`, `color_logs` to `true`, `docker.socket_path` to `"/var/run/docker.sock"`, and so on.
+All unspecified fields use their defaults from `pkg/config/config.go:115-150` — `reconcile_interval` defaults to `"1h"` (binary), `log_level` to `"info"`, `color_logs` to `true`, `docker.socket_path` to `"/var/run/docker.sock"`, `docker.cleanup_old_images` to `true`, and so on.
 
 ## Notifications and template configuration
 

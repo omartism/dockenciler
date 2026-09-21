@@ -18,7 +18,7 @@ Mounting `/var/run/docker.sock` into a container gives that container the abilit
 - Execute commands inside any container via `docker exec`.
 - Access host resources through container mounts (e.g., mount the host filesystem as a volume).
 
-Dockenciler uses only a subset of these capabilities: `ListContainers`, `InspectContainer`, `PullImage`, `RecreateContainer`, `RegistryLogin`, `ImageInspectWithRaw`, and service operations via the Swarm API. But the socket itself does not enforce least-privilege — any compromise of the Dockenciler process grants full Docker API access.
+Dockenciler uses only a subset of these capabilities: `ListContainers`, `InspectContainer`, `PullImage`, `RecreateContainer`, `RegistryLogin`, `ImageInspectWithRaw`, `RemoveImage` (superseded images, never forced — the daemon refuses while any container references the image), and service operations via the Swarm API. But the socket itself does not enforce least-privilege — any compromise of the Dockenciler process grants full Docker API access.
 
 ### Reducing the risk
 
@@ -126,7 +126,7 @@ The self-update skip is applied **before** the exclusion list check (`pkg/reconc
 
 ### Logs as audit trail
 
-Dockenciler's structured logs can serve as an audit trail for container updates. Each update produces log lines with container ID, image reference, and both digests (old and new). In production deployments, forward these logs to a centralized log aggregator with appropriate access controls.
+Dockenciler's structured logs can serve as an audit trail for container updates. Each update produces log lines with container ID, image reference, and both digests (old and new). Images reclaimed by the update are logged individually (`"Removed superseded image"` with the image ID), as are removals the daemon refused (`"Failed to remove superseded image"`), so what left the host can be reconstructed from logs alone. In production deployments, forward these logs to a centralized log aggregator with appropriate access controls.
 
 ### Monitoring the monitor
 
