@@ -35,9 +35,6 @@ ENV LOG_LEVEL=info \
     DOCKER_LABEL_FILTER=dockenciler.autoupdate=true \
     DRY_RUN=false
 
-# Healthcheck to ensure the process is running
-HEALTHCHECK --interval=30s --timeout=3s \
-  CMD ps aux | grep dockenciler || exit 1
 
 # Entrypoint
 ENTRYPOINT ["/dockenciler"]
