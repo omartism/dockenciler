@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -180,121 +181,127 @@ func TestIsSwarmMode(t *testing.T) {
 }
 
 func TestUpdateService(t *testing.T) {
+	inspectedService := func() swarm.Service {
+		return swarm.Service{
+			Meta: swarm.Meta{Version: swarm.Version{Index: 42}},
+			Spec: swarm.ServiceSpec{
+				Annotations: swarm.Annotations{
+					Name: "prod_myna-dashboard",
+					Labels: map[string]string{
+						"com.docker.stack.namespace": "prod",
+					},
+				},
+				Mode: swarm.ServiceMode{Global: &swarm.GlobalService{}},
+				TaskTemplate: swarm.TaskSpec{
+					ContainerSpec: &swarm.ContainerSpec{
+						Image:  "old-image",
+						Env:    []string{"A=B"},
+						Labels: map[string]string{"dockenciler.autoupdate": "true"},
+					},
+					Networks: []swarm.NetworkAttachmentConfig{{Target: "app-net"}},
+				},
+				UpdateConfig: &swarm.UpdateConfig{Parallelism: 1},
+			},
+		}
+	}
+	requestedSpec := ServiceSpec{
+		TaskTemplate: struct {
+			ContainerSpec struct {
+				Image string
+			}
+		}{
+			ContainerSpec: struct{ Image string }{Image: "new-image"},
+		},
+	}
+
+	authConfig := registry.AuthConfig{
+		Username:      "AWS",
+		Password:      "tok",
+		ServerAddress: "941377156655.dkr.ecr.eu-central-1.amazonaws.com",
+	}
+	authJSON, err := json.Marshal(authConfig)
+	require.NoError(t, err)
+	encodedAuth := base64.StdEncoding.EncodeToString(authJSON)
+
 	tests := []struct {
-		name          string
-		serviceID     string
-		spec          ServiceSpec
-		setupMock     func(*mockDockerClient)
-		wantErr       bool
-		expectedError string
+		name         string
+		inspected    swarm.Service
+		lastAuth     *registry.AuthConfig
+		updateErr    error
+		wantErr      string
+		wantAuth     string
+		wantNoUpdate bool
 	}{
 		{
-			name:      "success",
-			serviceID: "service1",
-			spec: ServiceSpec{
-				TaskTemplate: struct {
-					ContainerSpec struct {
-						Image string
-					}
-				}{
-					ContainerSpec: struct {
-						Image string
-					}{
-						Image: "new-image",
-					},
-				},
-			},
-			setupMock: func(m *mockDockerClient) {
-				m.ServiceInspectWithRawFunc = func(ctx context.Context, serviceID string, options types.ServiceInspectOptions) (swarm.Service, []byte, error) {
-					return swarm.Service{
-						Meta: swarm.Meta{
-							Version: swarm.Version{Index: 42},
-						},
-						Spec: swarm.ServiceSpec{
-							Annotations: swarm.Annotations{
-								Name: "prod_myna-dashboard",
-								Labels: map[string]string{
-									"com.docker.stack.namespace": "prod",
-								},
-							},
-						},
-					}, nil, nil
-				}
-				m.ServiceUpdateFunc = func(ctx context.Context, serviceID string, version swarm.Version, spec swarm.ServiceSpec, options types.ServiceUpdateOptions) (swarm.ServiceUpdateResponse, error) {
-					if serviceID != "service1" {
-						t.Errorf("expected serviceID service1, got %s", serviceID)
-					}
-					if spec.TaskTemplate.ContainerSpec.Image != "new-image" {
-						t.Errorf("expected image new-image, got %s", spec.TaskTemplate.ContainerSpec.Image)
-					}
-					if spec.Annotations.Name != "prod_myna-dashboard" {
-						t.Errorf("expected annotations name prod_myna-dashboard, got %s", spec.Annotations.Name)
-					}
-					if spec.Annotations.Labels["com.docker.stack.namespace"] != "prod" {
-						t.Errorf("expected label com.docker.stack.namespace=prod, got %v", spec.Annotations.Labels)
-					}
-					return swarm.ServiceUpdateResponse{}, nil
-				}
-			},
-			wantErr:       false,
-			expectedError: "",
+			name:      "preserves inspected service while replacing image",
+			inspected: inspectedService(),
 		},
 		{
-			name:      "error from service update",
-			serviceID: "service1",
-			spec: ServiceSpec{
-				TaskTemplate: struct {
-					ContainerSpec struct {
-						Image string
-					}
-				}{
-					ContainerSpec: struct {
-						Image string
-					}{
-						Image: "new-image",
-					},
-				},
-			},
-			setupMock: func(m *mockDockerClient) {
-				m.ServiceInspectWithRawFunc = func(ctx context.Context, serviceID string, options types.ServiceInspectOptions) (swarm.Service, []byte, error) {
-					return swarm.Service{
-						Meta: swarm.Meta{
-							Version: swarm.Version{Index: 1},
-						},
-						Spec: swarm.ServiceSpec{
-							Annotations: swarm.Annotations{Name: "test-service"},
-						},
-					}, nil, nil
-				}
-				m.ServiceUpdateFunc = func(ctx context.Context, serviceID string, version swarm.Version, spec swarm.ServiceSpec, options types.ServiceUpdateOptions) (swarm.ServiceUpdateResponse, error) {
-					return swarm.ServiceUpdateResponse{}, errors.New("update failed")
-				}
-			},
-			wantErr:       true,
-			expectedError: "update failed",
+			name:      "encodes registry authentication",
+			inspected: inspectedService(),
+			lastAuth:  &authConfig,
+			wantAuth:  encodedAuth,
+		},
+		{
+			name:         "rejects service without container tasks",
+			inspected:    swarm.Service{Meta: swarm.Meta{Version: swarm.Version{Index: 42}}},
+			wantErr:      "does not use container tasks",
+			wantNoUpdate: true,
+		},
+		{
+			name:      "returns service update error",
+			inspected: inspectedService(),
+			updateErr: errors.New("update failed"),
+			wantErr:   "update failed",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &mockDockerClient{}
-			if tt.setupMock != nil {
-				tt.setupMock(mockClient)
+			updateCalled := false
+			gotAuth := ""
+			mockClient := &mockDockerClient{
+				ServiceInspectWithRawFunc: func(context.Context, string, types.ServiceInspectOptions) (swarm.Service, []byte, error) {
+					return tt.inspected, nil, nil
+				},
+				ServiceUpdateFunc: func(_ context.Context, serviceID string, version swarm.Version, spec swarm.ServiceSpec, options types.ServiceUpdateOptions) (swarm.ServiceUpdateResponse, error) {
+					gotAuth = options.EncodedRegistryAuth
+					updateCalled = true
+					require.Equal(t, "service1", serviceID)
+					require.Equal(t, uint64(42), version.Index)
+					require.NotNil(t, spec.Mode.Global)
+					require.Equal(t, []string{"A=B"}, spec.TaskTemplate.ContainerSpec.Env)
+					require.Equal(t, map[string]string{"dockenciler.autoupdate": "true"}, spec.TaskTemplate.ContainerSpec.Labels)
+					require.Len(t, spec.TaskTemplate.Networks, 1)
+					require.Equal(t, "app-net", spec.TaskTemplate.Networks[0].Target)
+					require.NotNil(t, spec.UpdateConfig)
+					require.Equal(t, uint64(1), spec.UpdateConfig.Parallelism)
+					require.Equal(t, "new-image", spec.TaskTemplate.ContainerSpec.Image)
+					if tt.wantAuth == "" {
+						require.Empty(t, gotAuth)
+					} else {
+						require.Equal(t, tt.wantAuth, gotAuth)
+					}
+					return swarm.ServiceUpdateResponse{}, tt.updateErr
+				},
 			}
-			dockerClient := &DockerClientImpl{client: mockClient}
+			dockerClient := &DockerClientImpl{client: mockClient, lastAuthConfig: tt.lastAuth}
 
-			err := dockerClient.UpdateService(context.Background(), tt.serviceID, tt.spec)
-			if tt.wantErr {
-				require.Error(t, err)
-				if tt.expectedError != "" {
-					assert.ErrorContains(t, err, tt.expectedError)
-				}
+			err := dockerClient.UpdateService(context.Background(), "service1", requestedSpec)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
 			} else {
 				require.NoError(t, err)
+			}
+			if tt.wantNoUpdate {
+				require.False(t, updateCalled)
+			} else {
+				require.True(t, updateCalled)
 			}
 		})
 	}
 }
+
 func TestRecreateContainerSwarmManaged(t *testing.T) {
 	tests := []struct {
 		name          string

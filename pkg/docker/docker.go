@@ -668,19 +668,33 @@ func (d *DockerClientImpl) RecreateContainer(ctx context.Context, id string, spe
 }
 
 func (d *DockerClientImpl) UpdateService(ctx context.Context, serviceID string, spec ServiceSpec) error {
-	// First, inspect the service to get its current version and annotations
 	service, _, err := d.client.ServiceInspectWithRaw(ctx, serviceID, types.ServiceInspectOptions{})
 	if err != nil {
 		return err
 	}
 
-	// Convert our ServiceSpec to swarm.ServiceSpec, preserving existing annotations
-	// to avoid "renaming services is not supported" error from Docker daemon
-	swarmSpec := toSwarmServiceSpec(spec)
-	swarmSpec.Annotations = service.Spec.Annotations
+	if service.Spec.TaskTemplate.ContainerSpec == nil {
+		return fmt.Errorf("service %s does not use container tasks", serviceID)
+	}
 
-	// Perform a rolling update by updating the service
-	_, err = d.client.ServiceUpdate(ctx, serviceID, service.Version, swarmSpec, types.ServiceUpdateOptions{})
+	// Preserve the complete current specification and change only the image.
+	swarmSpec := service.Spec
+	swarmSpec.TaskTemplate.ContainerSpec.Image = spec.TaskTemplate.ContainerSpec.Image
+
+	d.mu.RLock()
+	authConfig := d.lastAuthConfig
+	d.mu.RUnlock()
+
+	options := types.ServiceUpdateOptions{}
+	if authConfig != nil {
+		authJSON, err := json.Marshal(authConfig)
+		if err != nil {
+			return err
+		}
+		options.EncodedRegistryAuth = base64.StdEncoding.EncodeToString(authJSON)
+	}
+
+	_, err = d.client.ServiceUpdate(ctx, serviceID, service.Version, swarmSpec, options)
 	return err
 }
 
@@ -760,18 +774,6 @@ func (d *DockerClientImpl) GetServiceID(ctx context.Context, containerID string)
 		return serviceID, nil
 	}
 	return "", nil
-}
-
-// Helper functions
-
-func toSwarmServiceSpec(spec ServiceSpec) swarm.ServiceSpec {
-	return swarm.ServiceSpec{
-		TaskTemplate: swarm.TaskSpec{
-			ContainerSpec: &swarm.ContainerSpec{
-				Image: spec.TaskTemplate.ContainerSpec.Image,
-			},
-		},
-	}
 }
 
 // Helper functions from the original file
