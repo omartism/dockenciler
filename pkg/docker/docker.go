@@ -104,6 +104,13 @@ type ServiceSpec struct {
 			Image string
 		}
 	}
+	// Force re-creates the tasks even when the resulting spec is byte-identical
+	// to the current one. Swarm diffs a service update against the stored spec
+	// and, when the image reference is unchanged, starts no new task revision —
+	// so a rolling update onto a freshly pushed tag of the *same* name silently
+	// does nothing and the tasks keep the image they were created with. Callers
+	// that already know a rollout is required must set this.
+	Force bool
 }
 
 var ErrContainerManagedBySwarm = fmt.Errorf("container is managed by a swarm service")
@@ -680,6 +687,14 @@ func (d *DockerClientImpl) UpdateService(ctx context.Context, serviceID string, 
 	// Preserve the complete current specification and change only the image.
 	swarmSpec := service.Spec
 	swarmSpec.TaskTemplate.ContainerSpec.Image = spec.TaskTemplate.ContainerSpec.Image
+	if spec.Force {
+		// A rebuild normally lands behind the same tag, so the image reference
+		// is frequently unchanged and Swarm's diff of the update against the
+		// stored spec matches — it then starts no new task revision and the
+		// tasks keep the image they were created with. Bumping this counter is
+		// what `docker service update --force` does to force a rollout.
+		swarmSpec.TaskTemplate.ForceUpdate++
+	}
 
 	d.mu.RLock()
 	authConfig := d.lastAuthConfig

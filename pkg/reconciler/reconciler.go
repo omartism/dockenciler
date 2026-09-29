@@ -285,11 +285,15 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			// Try to get the service ID for this container
 			serviceID, err := r.DockerClient.GetServiceID(ctx, container.ID)
 			if err == nil && serviceID != "" {
-				// Use service update for rolling update
-				serviceSpec := docker.ServiceSpec{}
-				// Recreate/update with the freshly pulled tag, not the create-time
-				// ref: container.Image may carry a stale @sha256 pin that would
-				// resurrect the old image.
+				// Use service update for rolling update. Recreate/update with the
+				// freshly pulled tag, not the create-time ref: container.Image may
+				// carry a stale @sha256 pin that would resurrect the old image.
+				// Force is required because the tag a service already tracks is
+				// usually unchanged — a rebuilt image pushes a new digest behind
+				// the same name — and Swarm starts no task revision for a spec that
+				// diffs clean, leaving tasks on the old image and this loop
+				// re-detecting it every interval.
+				serviceSpec := docker.ServiceSpec{Force: true}
 				serviceSpec.TaskTemplate.ContainerSpec.Image = imageRef
 				if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
 					slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "error", err)
@@ -310,7 +314,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 					serviceID, err := r.DockerClient.GetServiceID(ctx, container.ID)
 					if err == nil && serviceID != "" {
 						slog.Info("Updating service for swarm-managed container", "container_id", container.ID, "service_id", serviceID)
-						serviceSpec := docker.ServiceSpec{}
+						serviceSpec := docker.ServiceSpec{Force: true}
 						serviceSpec.TaskTemplate.ContainerSpec.Image = imageRef
 						if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
 							slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "error", err)
