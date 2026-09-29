@@ -226,6 +226,7 @@ func TestUpdateService(t *testing.T) {
 	tests := []struct {
 		name         string
 		inspected    swarm.Service
+		force        bool
 		lastAuth     *registry.AuthConfig
 		updateErr    error
 		wantErr      string
@@ -235,6 +236,18 @@ func TestUpdateService(t *testing.T) {
 		{
 			name:      "preserves inspected service while replacing image",
 			inspected: inspectedService(),
+		},
+		{
+			// A rebuilt image behind an unchanged tag is the case that made
+			// Swarm skip the rollout entirely and dockenciler re-announce the
+			// same update every interval; the force flag is what rolls it.
+			name: "forces task recreation for an unchanged image reference",
+			inspected: func() swarm.Service {
+				s := inspectedService()
+				s.Spec.TaskTemplate.ContainerSpec.Image = "new-image"
+				return s
+			}(),
+			force: true,
 		},
 		{
 			name:      "encodes registry authentication",
@@ -267,6 +280,7 @@ func TestUpdateService(t *testing.T) {
 				ServiceUpdateFunc: func(_ context.Context, serviceID string, version swarm.Version, spec swarm.ServiceSpec, options types.ServiceUpdateOptions) (swarm.ServiceUpdateResponse, error) {
 					gotAuth = options.EncodedRegistryAuth
 					updateCalled = true
+					require.Equal(t, tt.force, spec.TaskTemplate.ForceUpdate == 1)
 					require.Equal(t, "service1", serviceID)
 					require.Equal(t, uint64(42), version.Index)
 					require.NotNil(t, spec.Mode.Global)
@@ -287,7 +301,9 @@ func TestUpdateService(t *testing.T) {
 			}
 			dockerClient := &DockerClientImpl{client: mockClient, lastAuthConfig: tt.lastAuth}
 
-			err := dockerClient.UpdateService(context.Background(), "service1", requestedSpec)
+			forceSpec := requestedSpec
+			forceSpec.Force = tt.force
+			err := dockerClient.UpdateService(context.Background(), "service1", forceSpec)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 			} else {
