@@ -47,16 +47,17 @@ func (m *MockRegistry) InvalidateCache() {
 // MockDockerClient is a mock implementation of the DockerClient interface
 // using function fields for flexible testing
 type MockDockerClient struct {
-	ListContainersFunc    func(ctx context.Context, labelFilter string) ([]docker.Container, error)
-	InspectContainerFunc  func(ctx context.Context, id string) (docker.ContainerSpec, error)
-	PullImageFunc         func(ctx context.Context, imageRef string) error
-	RecreateContainerFunc func(ctx context.Context, id string, spec docker.ContainerSpec, newImage string) error
-	UpdateServiceFunc     func(ctx context.Context, serviceID string, spec docker.ServiceSpec) error
-	GetImageDigestFunc    func(ctx context.Context, imageRef string) (string, error)
-	RemoveImageFunc       func(ctx context.Context, imageID string) error
-	AuthenticateFunc      func(ctx context.Context, username, password, registryHost string) error
-	IsSwarmModeFunc       func(ctx context.Context) (bool, error)
-	GetServiceIDFunc      func(ctx context.Context, containerID string) (string, error)
+	ListContainersFunc        func(ctx context.Context, labelFilter string) ([]docker.Container, error)
+	InspectContainerFunc      func(ctx context.Context, id string) (docker.ContainerSpec, error)
+	PullImageFunc             func(ctx context.Context, imageRef string) error
+	RecreateContainerFunc     func(ctx context.Context, id string, spec docker.ContainerSpec, newImage string) error
+	UpdateServiceFunc         func(ctx context.Context, serviceID string, spec docker.ServiceSpec) error
+	GetImageDigestFunc        func(ctx context.Context, imageRef string) (string, error)
+	RemoveImageFunc           func(ctx context.Context, imageID string) error
+	AuthenticateFunc          func(ctx context.Context, username, password, registryHost string) error
+	IsSwarmModeFunc           func(ctx context.Context) (bool, error)
+	GetServiceIDFunc          func(ctx context.Context, containerID string) (string, error)
+	GetServiceUpdateStateFunc func(ctx context.Context, serviceID string) (docker.ServiceUpdateState, error)
 }
 
 func (m *MockDockerClient) ListContainers(ctx context.Context, labelFilter string) ([]docker.Container, error) {
@@ -127,6 +128,13 @@ func (m *MockDockerClient) GetServiceID(ctx context.Context, containerID string)
 		return m.GetServiceIDFunc(ctx, containerID)
 	}
 	return "", nil
+}
+
+func (m *MockDockerClient) GetServiceUpdateState(ctx context.Context, serviceID string) (docker.ServiceUpdateState, error) {
+	if m.GetServiceUpdateStateFunc != nil {
+		return m.GetServiceUpdateStateFunc(ctx, serviceID)
+	}
+	return docker.ServiceUpdateState{}, nil
 }
 
 // MockNotifier is a mock implementation of the Notifier interface

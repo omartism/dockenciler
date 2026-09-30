@@ -71,6 +71,16 @@ type Config struct {
 	DryRun            bool          `json:"dry_run" mapstructure:"dry_run"`
 	Exclusions        []string      `json:"exclusions" mapstructure:"exclusions"`
 	Timezone          string        `json:"timezone" mapstructure:"timezone"`
+	// ForceUpdateMinInterval is the shortest gap allowed between two
+	// ForceUpdate bumps of the same service. Swarm needs at least
+	// UpdateConfig.Delay+Monitor to finish a rollout, which is routinely
+	// longer than the reconcile interval, so a bump every tick restarts the
+	// rollout before it can converge.
+	ForceUpdateMinInterval string `json:"force_update_min_interval" mapstructure:"force_update_min_interval"`
+	// MaxRolloutWait bounds how long a rollout this process started is
+	// tolerated before a new bump is allowed to supersede it, so a rollout
+	// wedged by Swarm's own failure handling cannot block updates forever.
+	MaxRolloutWait string `json:"max_rollout_wait" mapstructure:"max_rollout_wait"`
 }
 
 type Notifications struct {
@@ -125,6 +135,8 @@ func LoadConfig(path string) (*Config, error) {
 	v.SetDefault("docker.label_filter", "dockenciler.autoupdate=true")
 	v.SetDefault("docker.cleanup_old_images", true)
 	v.SetDefault("reconcile_interval", "1h")
+	v.SetDefault("force_update_min_interval", "10m")
+	v.SetDefault("max_rollout_wait", "30m")
 	v.SetDefault("log_level", "info")
 	v.SetDefault("dry_run", false)
 	v.SetDefault("color_logs", true)

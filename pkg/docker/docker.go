@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -111,7 +112,31 @@ type ServiceSpec struct {
 	// does nothing and the tasks keep the image they were created with. Callers
 	// that already know a rollout is required must set this.
 	Force bool
+	// MinForceUpdateInterval is the shortest gap allowed between two
+	// ForceUpdate bumps of the same service. Zero disables the backoff.
+	MinForceUpdateInterval time.Duration
+	// MaxRolloutWait is how long a rollout is tolerated before a new bump is
+	// allowed to supersede it. Zero disables the in-flight guard.
+	MaxRolloutWait time.Duration
 }
+
+// ServiceUpdateState reports whether a service currently has a rollout in
+// flight, and when that rollout started. A service that is mid-rollout must
+// not be given another ForceUpdate bump: the bump resets the rollout, so the
+// tasks never reach the new image and the next tick re-detects the same
+// mismatch, restarting the cycle.
+type ServiceUpdateState struct {
+	InFlight  bool
+	StartedAt time.Time
+}
+
+// ErrServiceUpdateInFlight reports that a rollout is already running for the
+// service, so the requested update was deliberately not issued.
+var ErrServiceUpdateInFlight = errors.New("service update already in flight")
+
+// ErrServiceUpdateBackoff reports that the service was bumped too recently for
+// another ForceUpdate bump to be issued.
+var ErrServiceUpdateBackoff = errors.New("service force-update backoff not elapsed")
 
 var ErrContainerManagedBySwarm = fmt.Errorf("container is managed by a swarm service")
 
@@ -126,6 +151,7 @@ type DockerClient interface {
 	GetImageDigest(ctx context.Context, imageRef string) (string, error)
 	RemoveImage(ctx context.Context, imageID string) error
 	GetServiceID(ctx context.Context, containerID string) (string, error)
+	GetServiceUpdateState(ctx context.Context, serviceID string) (ServiceUpdateState, error)
 }
 
 // DockerAPIClient defines the Docker client interface for dependency injection
@@ -152,6 +178,9 @@ type DockerClientImpl struct {
 	client         DockerAPIClient
 	mu             sync.RWMutex
 	lastAuthConfig *registry.AuthConfig
+	// lastForceUpdate records when this process last bumped a service's
+	// ForceUpdate counter, keyed by service ID, so the backoff spans ticks.
+	lastForceUpdate map[string]time.Time
 }
 
 func NewDockerClient() (*DockerClientImpl, error) {
@@ -684,6 +713,24 @@ func (d *DockerClientImpl) UpdateService(ctx context.Context, serviceID string, 
 		return fmt.Errorf("service %s does not use container tasks", serviceID)
 	}
 
+	if spec.Force {
+		// Two guards keep a bump-per-tick loop from starving its own rollout.
+		// Swarm restarts the update whenever the spec changes, and it needs at
+		// least UpdateConfig.Delay+Monitor to bring the new tasks up. When that
+		// window is longer than the caller's reconcile interval, every tick
+		// resets the rollout, no task ever reaches the new image, and the next
+		// tick re-detects the same mismatch — which is exactly how a service
+		// ends up churning tasks forever while a task sits on a stale digest.
+		//
+		// The in-flight guard is the precise one: a rollout already running
+		// will deliver the image on its own. MaxRolloutWait keeps it from
+		// wedging a genuinely stuck service, and the backoff is the coarse
+		// floor for the case where the update status is not yet visible.
+		if err := d.checkForceUpdateAllowed(ctx, service, spec); err != nil {
+			return err
+		}
+	}
+
 	// Preserve the complete current specification and change only the image.
 	swarmSpec := service.Spec
 	swarmSpec.TaskTemplate.ContainerSpec.Image = spec.TaskTemplate.ContainerSpec.Image
@@ -710,7 +757,78 @@ func (d *DockerClientImpl) UpdateService(ctx context.Context, serviceID string, 
 	}
 
 	_, err = d.client.ServiceUpdate(ctx, serviceID, service.Version, swarmSpec, options)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if spec.Force {
+		d.mu.Lock()
+		if d.lastForceUpdate == nil {
+			d.lastForceUpdate = make(map[string]time.Time, 1)
+		}
+		d.lastForceUpdate[serviceID] = time.Now()
+		d.mu.Unlock()
+	}
+	return nil
+}
+
+// checkForceUpdateAllowed reports whether a ForceUpdate bump may be issued for
+// this service right now. It returns ErrServiceUpdateInFlight while a rollout
+// this process started is still within MaxRolloutWait, and
+// ErrServiceUpdateBackoff while the per-service bump backoff has not elapsed.
+// Both are sentinel errors: the caller treats them as "nothing to do this
+// tick" rather than as a failure.
+func (d *DockerClientImpl) checkForceUpdateAllowed(ctx context.Context, service swarm.Service, spec ServiceSpec) error {
+	if spec.MinForceUpdateInterval > 0 {
+		d.mu.RLock()
+		last, bumped := d.lastForceUpdate[service.ID]
+		d.mu.RUnlock()
+		if bumped && time.Since(last) < spec.MinForceUpdateInterval {
+			return fmt.Errorf("%w: %s since last bump, minimum %s", ErrServiceUpdateBackoff,
+				time.Since(last).Truncate(time.Second), spec.MinForceUpdateInterval)
+		}
+	}
+
+	if spec.MaxRolloutWait <= 0 {
+		return nil
+	}
+	state, err := d.GetServiceUpdateState(ctx, service.ID)
+	if err != nil {
+		// Not knowing the rollout state is not a reason to skip the update;
+		// the backoff above still bounds how often this can happen.
+		slog.Warn("Could not read service update status, proceeding with force update", "service_id", service.ID, "error", err)
+		return nil
+	}
+	if !state.InFlight {
+		return nil
+	}
+	if elapsed := time.Since(state.StartedAt); elapsed < spec.MaxRolloutWait {
+		return fmt.Errorf("%w: running for %s, waiting up to %s", ErrServiceUpdateInFlight,
+			elapsed.Truncate(time.Second), spec.MaxRolloutWait)
+	}
+	return nil
+}
+
+// GetServiceUpdateState reports whether the service has a rollout in flight.
+// A rollback counts as in flight: it is still replacing tasks, and superseding
+// it would restart the replacement.
+func (d *DockerClientImpl) GetServiceUpdateState(ctx context.Context, serviceID string) (ServiceUpdateState, error) {
+	service, _, err := d.client.ServiceInspectWithRaw(ctx, serviceID, types.ServiceInspectOptions{})
+	if err != nil {
+		return ServiceUpdateState{}, err
+	}
+	if service.UpdateStatus == nil {
+		return ServiceUpdateState{}, nil
+	}
+	state := ServiceUpdateState{}
+	switch service.UpdateStatus.State {
+	case swarm.UpdateStateUpdating, swarm.UpdateStateRollbackStarted:
+		state.InFlight = true
+	}
+	if service.UpdateStatus.StartedAt != nil {
+		state.StartedAt = *service.UpdateStatus.StartedAt
+	}
+	return state, nil
 }
 
 func (d *DockerClientImpl) IsSwarmMode(ctx context.Context) (bool, error) {

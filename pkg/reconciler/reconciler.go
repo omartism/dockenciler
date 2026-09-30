@@ -28,6 +28,7 @@ type Reconciler struct {
 		UpdateService(ctx context.Context, serviceID string, spec docker.ServiceSpec) error
 		GetImageDigest(ctx context.Context, imageRef string) (string, error)
 		RemoveImage(ctx context.Context, imageID string) error
+		GetServiceUpdateState(ctx context.Context, serviceID string) (docker.ServiceUpdateState, error)
 		IsSwarmMode(ctx context.Context) (bool, error)
 		GetServiceID(ctx context.Context, containerID string) (string, error)
 		Authenticate(ctx context.Context, username, password, registryHost string) error
@@ -77,6 +78,35 @@ func (r *Reconciler) registryAuth(ctx context.Context, imageRef string) (registr
 		return router.GetAuthFor(ctx, imageRef)
 	}
 	return r.Registry.GetAuth(ctx)
+}
+
+// forceUpdateSpec builds the service spec used to roll a task onto a freshly
+// pushed tag, including the guards that stop the bump from repeating every
+// tick. Unparseable durations disable their guard rather than failing the
+// update, so a config typo degrades to the previous behaviour instead of
+// silently wedging rollouts.
+func (r *Reconciler) forceUpdateSpec(imageRef string) docker.ServiceSpec {
+	spec := docker.ServiceSpec{Force: true}
+	spec.TaskTemplate.ContainerSpec.Image = imageRef
+	if d, err := time.ParseDuration(r.Config.ForceUpdateMinInterval); err == nil {
+		spec.MinForceUpdateInterval = d
+	} else {
+		slog.Warn("Invalid force_update_min_interval, backoff disabled", "value", r.Config.ForceUpdateMinInterval, "error", err)
+	}
+	if d, err := time.ParseDuration(r.Config.MaxRolloutWait); err == nil {
+		spec.MaxRolloutWait = d
+	} else {
+		slog.Warn("Invalid max_rollout_wait, in-flight guard disabled", "value", r.Config.MaxRolloutWait, "error", err)
+	}
+	return spec
+}
+
+// updateDeferred reports whether err means the update was deliberately not
+// issued because a rollout is already in flight or the bump backoff has not
+// elapsed. Those are a skip, not a failure: the running rollout will deliver
+// the image on its own.
+func updateDeferred(err error) bool {
+	return errors.Is(err, docker.ErrServiceUpdateInFlight) || errors.Is(err, docker.ErrServiceUpdateBackoff)
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context) error {
@@ -293,9 +323,18 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 				// the same name — and Swarm starts no task revision for a spec that
 				// diffs clean, leaving tasks on the old image and this loop
 				// re-detecting it every interval.
-				serviceSpec := docker.ServiceSpec{Force: true}
-				serviceSpec.TaskTemplate.ContainerSpec.Image = imageRef
-				if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
+				// forceUpdateSpec carries the guards that keep a bump-per-tick
+				// loop from restarting the rollout before it can converge.
+				if err := r.DockerClient.UpdateService(ctx, serviceID, r.forceUpdateSpec(imageRef)); err != nil {
+					if updateDeferred(err) {
+						// A rollout is already bringing this service onto the
+						// new image. Recreating the container here would fight
+						// it, and reporting a failure would be wrong.
+						slog.Info("Service update deferred", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "reason", err)
+						skipped++
+						skipLog = append(skipLog, fmt.Sprintf("%s (update in flight)", shortID(container.ID)))
+						continue
+					}
 					slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "error", err)
 					// Fall back to container recreation on error
 				} else {
@@ -314,9 +353,13 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 					serviceID, err := r.DockerClient.GetServiceID(ctx, container.ID)
 					if err == nil && serviceID != "" {
 						slog.Info("Updating service for swarm-managed container", "container_id", container.ID, "service_id", serviceID)
-						serviceSpec := docker.ServiceSpec{Force: true}
-						serviceSpec.TaskTemplate.ContainerSpec.Image = imageRef
-						if err := r.DockerClient.UpdateService(ctx, serviceID, serviceSpec); err != nil {
+						if err := r.DockerClient.UpdateService(ctx, serviceID, r.forceUpdateSpec(imageRef)); err != nil {
+							if updateDeferred(err) {
+								slog.Info("Service update deferred", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "reason", err)
+								skipped++
+								skipLog = append(skipLog, fmt.Sprintf("%s (update in flight)", shortID(container.ID)))
+								continue // Continue to next container
+							}
 							slog.Error("Failed to update service", "container_id", container.ID, "service_id", serviceID, "image", container.Image, "error", err)
 							failed++
 							continue // Continue to next container
